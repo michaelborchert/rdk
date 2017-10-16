@@ -16,6 +16,9 @@ if __name__ == "__main__":
     parser.add_argument('--runtime','-R', help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
     parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
     parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+    parser.add_argument('--test-ci-json', '-j', help="JSON for test CI for testing.")
+    parser.add_argument('--test-ci-type', '-t', help="CI type to use for testing.")
+    parser.add_argument('--test-parameters', '-T', help="JSON for Config parameters for testing.")
 
     args = parser.parse_args()
 
