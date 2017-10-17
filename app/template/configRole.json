@@ -1,0 +1,130 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AWS CloudFormation template to create custom AWS Config rules. You will be billed for the AWS resources used if you create a stack from this template.",
+
+  "Parameters": {
+    "SourceBucket": {
+      "Description": "Name of the S3 bucket that you have stored the rule zip files in.",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "SourcePath": {
+      "Description": "Location in the S3 bucket where you have stored the rule zip files.",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "SourceEvents": {
+      "Description": "Event Type",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "SourceRuntime": {
+      "Description": "Runtime Language",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "SourcePeriodic": {
+      "Description": "Execution Frequency",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "255"
+    }
+  },
+  "Resources": {
+    "rdkRuleCodeLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": { "Ref": "SourceBucket" },
+          "S3Key": { "Ref": "SourcePrefix" }
+        },
+        "Description": "Create a new AWS lambda function for rule code",
+        "Handler": "rule_code.lambda_handler",
+        "MemorySize": "128",
+        "Role":  { "Fn::GetAtt": [ "rdkConfigRuleRole", "Arn" ] } ,
+        "Runtime": { "Ref": "SourcePeriodic"},
+        "Timeout": 60
+      }
+    },
+    "rdkConfigRule": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "MaximumExecutionFrequency" : { "Ref": "SourcePeriodic" }, 
+        "Scope": {
+          "ComplianceResourceTypes": { "Ref": "SourceEvents" }
+        },
+        "Source": {
+          "Owner": "CUSTOM_LAMBDA",
+          "SourceIdentifier": { "Fn::GetAtt": [ "rdkRuleCodeLambda", "Arn" ] },
+          "SourceDetails": [{
+            "EventSource": "aws.config",
+            "MessageType": "ConfigurationItemChangeNotification"
+          }, {
+            "EventSource": "aws.config",
+            "MessageType": "OversizedConfigurationItemChangeNotification"
+          }]
+        }
+      }
+    },
+    "rdkConfigRuleRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [ {
+            "Sid": "AllowLambdaAssumeRole",
+            "Effect": "Allow",
+            "Principal": { "Service": "lambda.amazonaws.com" },
+            "Action": "sts:AssumeRole"
+          } ]
+        },
+        "Policies": [ {
+          "PolicyName": "ConfigRulePolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "1",
+                "Action": [
+                  "s3:GetObject"
+                ],
+                "Effect": "Allow",
+                "Resource": { "Fn::Join" : [ "/", [ "arn:aws:s3:::", { "Ref": "SourceBucket" }, { "Ref": "SourcePath" } ] ] }                
+              },
+              {
+                "Sid": "2",
+                "Action": [
+                  "logs:CreateLogGroup",
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents",
+                  "logs:DescribeLogStreams"
+                ],
+                "Effect": "Allow",
+                "Resource": "*"
+              },
+              {
+                "Sid": "3",
+                "Action": [
+                  "config:PutEvaluations"
+                ],
+                "Effect": "Allow",
+                "Resource": "*"
+              }
+            ]
+          }
+        } ]
+      }
+    }
+  },
+
+  "Outputs": {
+    "RoleCodeLambda": {
+      "Description": "ARN for the Role Code lambda",
+      "Value": { "Fn::GetAtt": [ "RoleCodeLambda", "Arn" ] }
+    }
+  }
+}
