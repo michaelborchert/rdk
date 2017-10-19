@@ -184,6 +184,66 @@ class RDK():
 
         return 0
 
+    def deploy(self):
+        #run the deploy code
+        print ("Running deploy!")
+
+        #create custom session based on whatever credentials are available to us
+        my_session = self.get_boto_session()
+
+        #get accountID
+        my_sts = my_session.client('sts')
+        response = my_sts.get_caller_identity()
+        account_id = response['Account']
+
+        #zip rule code files and upload to s3 bucket
+        s3_src_dir = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0])
+        s3_dst = os.path.join(self.args.rulename[0], self.args.rulename[0]+".zip")
+        s3_src = shutil.make_archive(s3_dst, 'zip', s3_src_dir)
+        config_bucket_name = config_bucket_prefix + account_id
+        my_s3 = boto3.resource('s3')
+        my_s3.meta.client.upload_file(s3_src, config_bucket_name, s3_dst)
+
+        #deploy config rule
+        cfn_body = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], "template", "configRole.json")
+        my_cfn = my_session.client('cloudformation')
+        response = my_cfn.create_stack(
+            StackName=self.args.rulename[0],
+            TemplateBody=open(cfn_body, "r").read(),
+            Parameters=[
+                {
+                    'ParameterKey': 'SourceBucket',
+                    'ParameterValue': config_bucket_name,
+                },
+                {
+                    'ParameterKey': 'SourcePath',
+                    'ParameterValue': s3_dst,
+                },
+                {
+                    'ParameterKey': 'SourceEvents',
+                    'ParameterValue': self.args.event,
+                },
+                {
+                    'ParameterKey': 'SourceRuntime',
+                    'ParameterValue': self.args.runtime,
+                },
+                {
+                    'ParameterKey': 'SourcePeriodic',
+                    'ParameterValue': self.args.periodic,
+                },
+            ],
+            Capabilities=[
+                'CAPABILITY_IAM',
+            ],
+        )
+        #wait for changes to propagate.
+        print('Waiting for CloudFormation to propagate')
+        time.sleep(30)
+
+        print('Config deploy complete.')
+
+        return 0
+
     def test_local(self):
         print ("Running test_local!")
         parser = argparse.ArgumentParser(prog='rdk test-local')
