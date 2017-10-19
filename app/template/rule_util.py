@@ -93,18 +93,3 @@ def rule_handler(lambda_handler):
         # Used solely for RDK test to be able to test Lambda function
         return compliance
     return handler_wrapper
-
-class LambdaTestContext():
-    def __init__(self, function_name):
-        self.function_name = function_name
-        self.function_version = '0.0.0'
-        self.invoked_function_arn = 'arn:aws:lambda:us-east-1:12345678:function:' + function_name
-        self.memory_limit_in_mb = 256
-        self.aws_request_id = '1234567890'
-        self.log_group_name = 'dummy_log_group'
-        self.log_stream_name = 'dummy_log_stream'
-        self.identity = None
-        self.client_context = None
-
-    def get_remaining_time_in_millis():
-        return 100

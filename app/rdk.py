@@ -5,6 +5,7 @@ import boto3
 import json
 import time
 import imp
+import argparse
 
 rdk_dir = '.rdk'
 rules_dir = ''
@@ -31,6 +32,9 @@ class RDK():
         return(exit_code)
 
     def init(self):
+        #parser = argparse.ArgumentParser()
+        #self.args = parser.parse_args(self.args.command_args, self.args)
+
         #run the init code
         print ("Running init!")
 
@@ -119,6 +123,12 @@ class RDK():
 
     def create(self):
         print ("Running create!")
+        parser = argparse.ArgumentParser(prog='rdk create')
+        parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
+        parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
+        parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('rulename', metavar='<rulename>', nargs='*', help='Rule name(s) (required for some commands)')
+        self.args = parser.parse_args(self.args.command_args, self.args)
 
         if len(self.args.rulename) > 1:
             print("'create' command requires only one rule name.")
@@ -143,7 +153,7 @@ class RDK():
         #copy rule.py template into rule directory
         src = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, rule_handler)
         dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], self.args.rulename[0]+".py")
-        copyfile(src, dst)
+        shutil.copyfile(src, dst)
 
         #create custom session based on whatever credentials are available to us
         my_session = self.get_boto_session()
@@ -176,40 +186,63 @@ class RDK():
 
     def test_local(self):
         print ("Running test_local!")
+        parser = argparse.ArgumentParser(prog='rdk test-local')
+        parser.add_argument('rulenames', metavar='<rulename>[,<rulename>,...]', nargs='*', help='Rule name(s) to test')
+        parser.add_argument('--all','-a', help="Test will be run against all rules in the working directory.")
+        parser.add_argument('--test-ci-json', '-j', help="[optional] JSON for test CI for testing.")
+        parser.add_argument('--test-ci-types', '-t', help="[optional] CI type to use for testing.")
+        parser.add_argument('--test-parameters', '-p', help="[optional] JSON for Config parameters for testing.")
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
+        if self.args.all and self.args.rulename[0]:
+            print("You may specify either a single rule or --all, but not both.")
+            return 1
 
         #Dynamically import the shared rule_util module.
         util_path = os.path.join(rdk_dir, "rule_util.py")
         imp.load_source('rule_util', util_path)
 
-        #Dynamically import the custom rule code, so that we can run the evaluate_compliance function.
-        module_path = os.path.join(".", os.path.dirname(rules_dir), self.args.rulename[0], self.args.rulename[0]+".py")
-        module_name = str(self.args.rulename[0]).lower()
-        module = imp.load_source(module_name, module_path)
-
-        #Get CI JSON from either the CLI or one of the stored templates.
-        my_ci = {}
-        if self.args.test_ci_json:
-            my_ci = self.args.test_ci_json
+        #Construct our list of rules to test.
+        rule_names = []
+        if self.args.all:
+            for dir_name in os.listdir('.'):
+                code_file = dir_name + ".py"
+                if code_file in os.listdir(dir_name):
+                    rule_names.append(dir_name)
         else:
-            if self.args.test_ci_type:
-                my_ci_obj = TestCI(self.args.test_ci_type)
-                my_ci = my_ci_obj.get_json()
+            rule_names.append(self.args.rulename[0])
+
+
+        for rule_name in rule_names:
+            #Dynamically import the custom rule code, so that we can run the evaluate_compliance function.
+            module_path = os.path.join(".", os.path.dirname(rules_dir), rule_name, rule_name+".py")
+            module_name = str(rule_name).lower()
+            module = imp.load_source(module_name, module_path)
+
+            #Get CI JSON from either the CLI or one of the stored templates.
+            my_ci = {}
+            if self.args.test_ci_json:
+                my_ci = self.args.test_ci_json
             else:
-                print("You must specify either a test CI resource type or provide a valid JSON document")
-                return 1
+                if self.args.test_ci_type:
+                    my_ci_obj = TestCI(self.args.test_ci_type)
+                    my_ci = my_ci_obj.get_json()
+                else:
+                    print("You must specify either a test CI resource type or provide a valid JSON document")
+                    return 1
 
-        #Get Config parameters from the CLI if provided, otherwise leave dict empty.
-        #TODO: currently very picky about JSON punctuation - can we make this more generous on inputs?
-        my_parameters = {}
-        if self.args.test_parameters:
-            print (self.args.test_parameters)
-            my_parameters = json.loads(self.args.test_parameters)
+            #Get Config parameters from the CLI if provided, otherwise leave dict empty.
+            #TODO: currently very picky about JSON punctuation - can we make this more generous on inputs?
+            my_parameters = {}
+            if self.args.test_parameters:
+                print (self.args.test_parameters)
+                my_parameters = json.loads(self.args.test_parameters)
 
-        #Execute the evaluate_compliance function
-        print(my_ci)
-        print(my_parameters)
-        result = getattr(module, 'evaluate_compliance')(my_ci, my_parameters)
-        print(result)
+            #Execute the evaluate_compliance function
+            print(my_ci)
+            print(my_parameters)
+            result = getattr(module, 'evaluate_compliance')(my_ci, my_parameters)
+            print(result)
 
         return 0
 

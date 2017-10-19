@@ -1,1 +1,1 @@
-{"Parameters": {"CodeKey": "MyTestRule.zip", "Runtime": "python2.7", "CodeBucket": "config-rule-code-bucket-212591712841", "RuleName": "MyTestRule"}}
+{"Parameters": {"CodeKey": "MyTestRule.zip", "Periodic": "One_Hour", "Runtime": "python2.7", "CodeBucket": "config-rule-code-bucket-707614783076", "RuleName": "MyTestRule"}}
