@@ -88,7 +88,7 @@ class RDK():
         delivery_permissions_policy = policy_template.replace('ACCOUNTID', account_id)
         my_iam.put_role_policy(RoleName=config_role_name, PolicyName='ConfigDeliveryPermissions', PolicyDocument=delivery_permissions_policy)
 
-        #wait for changes to propagate.
+        #wait for changes to propagate. TODO: only do this if we had to create the role.
         print('Waiting for IAM role to propagate')
         time.sleep(16)
 
@@ -121,6 +121,7 @@ class RDK():
         #make sure lambda execution role exists - TODO
         return 0
 
+    #TODO: roll-back directory creation on failure.
     def create(self):
         print ("Running create!")
         parser = argparse.ArgumentParser(prog='rdk create')
@@ -134,9 +135,9 @@ class RDK():
             print("'create' command requires only one rule name.")
             return 1
 
-        if self.args.event and self.args.periodic:
-            print("Either the 'Event' flag or the 'Periodic' flag may be set, but not both.")
-            return 1
+        #if self.args.event and self.args.periodic:
+        #    print("Either the 'Event' flag or the 'Periodic' flag may be set, but not both.")
+        #    return 1
 
         if not self.args.runtime:
             print("Runtime is required for 'create' command.")
@@ -155,6 +156,10 @@ class RDK():
         dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], self.args.rulename[0]+".py")
         shutil.copyfile(src, dst)
 
+        src = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, util_filename)
+        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], util_filename)
+        shutil.copyfile(src, dst)
+
         #create custom session based on whatever credentials are available to us
         my_session = self.get_boto_session()
 
@@ -166,15 +171,15 @@ class RDK():
         #create config file and place in rule directory
         parameters = {
             'RuleName': self.args.rulename[0],
-            'Runtime': self.args.runtime,
+            'SourceRuntime': self.args.runtime,
             'CodeBucket': code_bucket_prefix + account_id,
             'CodeKey': self.args.rulename[0]+'.zip'
         }
 
         if self.args.event:
-            parameters['Event'] = self.args.event
-        elif self.args.periodic:
-            parameters['Periodic'] = self.args.periodic
+            parameters['SourceEvents'] = self.args.event
+        if self.args.periodic:
+            parameters['SourcePeriodic'] = self.args.periodic
 
         my_params = {"Parameters": parameters}
         params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], parameter_file_name)
@@ -188,6 +193,13 @@ class RDK():
         #run the deploy code
         print ("Running deploy!")
 
+        parser = argparse.ArgumentParser(prog='rdk create')
+        parser.add_argument('rulename', metavar='<rulename>', nargs='*', help='Rule name(s) to deploy')
+        parser.add_argument('--all','-a', help="All rules in the working directory will be deployed.")
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
+        rule_names = self.get_rule_list_for_command()
+
         #create custom session based on whatever credentials are available to us
         my_session = self.get_boto_session()
 
@@ -196,49 +208,85 @@ class RDK():
         response = my_sts.get_caller_identity()
         account_id = response['Account']
 
-        #zip rule code files and upload to s3 bucket
-        s3_src_dir = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0])
-        s3_dst = os.path.join(self.args.rulename[0], self.args.rulename[0]+".zip")
-        s3_src = shutil.make_archive(s3_dst, 'zip', s3_src_dir)
-        config_bucket_name = config_bucket_prefix + account_id
-        my_s3 = boto3.resource('s3')
-        my_s3.meta.client.upload_file(s3_src, config_bucket_name, s3_dst)
+        for rule_name in rule_names:
+            print ("Zipping " + rule_name)
+            #zip rule code files and upload to s3 bucket
+            s3_src_dir = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rule_name)
+            s3_dst = os.path.join(rule_name, rule_name+".zip")
+            s3_src = shutil.make_archive(rule_name, 'zip', s3_src_dir)
+            code_bucket_name = code_bucket_prefix + account_id
+            my_s3 = my_session.resource('s3')
 
-        #deploy config rule
-        cfn_body = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], "template", "configRole.json")
-        my_cfn = my_session.client('cloudformation')
-        response = my_cfn.create_stack(
-            StackName=self.args.rulename[0],
-            TemplateBody=open(cfn_body, "r").read(),
-            Parameters=[
+            print ("Uploading " + rule_name)
+            my_s3.meta.client.upload_file(s3_src, code_bucket_name, s3_dst)
+
+            #create CFN Parameters
+            #read rest of params from file in rule directory
+            params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rule_name, parameter_file_name)
+            parameters_file = open(params_file_path, 'r')
+            my_json = json.load(parameters_file)
+            parameters_file.close()
+
+            my_params = [
                 {
                     'ParameterKey': 'SourceBucket',
-                    'ParameterValue': config_bucket_name,
+                    'ParameterValue': code_bucket_name,
                 },
                 {
                     'ParameterKey': 'SourcePath',
                     'ParameterValue': s3_dst,
                 },
                 {
-                    'ParameterKey': 'SourceEvents',
-                    'ParameterValue': self.args.event,
+                    'ParameterKey': 'SourceRuntime',
+                    'ParameterValue': my_json['Parameters']['SourceRuntime'],
                 },
                 {
-                    'ParameterKey': 'SourceRuntime',
-                    'ParameterValue': self.args.runtime,
+                    'ParameterKey': 'SourceEvents',
+                    'ParameterValue': my_json['Parameters']['SourceEvents'],
                 },
                 {
                     'ParameterKey': 'SourcePeriodic',
-                    'ParameterValue': self.args.periodic,
-                },
-            ],
-            Capabilities=[
-                'CAPABILITY_IAM',
-            ],
-        )
-        #wait for changes to propagate.
-        print('Waiting for CloudFormation to propagate')
-        time.sleep(30)
+                    'ParameterValue': my_json['Parameters']['SourcePeriodic'],
+                }]
+
+            #deploy config rule
+            cfn_body = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, "configRole.json")
+            my_cfn = my_session.client('cloudformation')
+
+            try:
+                my_stack = my_cfn.describe_stacks(StackName=rule_name)
+                #If we've gotten here, stack exists and we should update it.
+                print ("Updating CloudFormation Stack for " + rule_name)
+                response = my_cfn.update_stack(
+                    StackName=rule_name,
+                    TemplateBody=open(cfn_body, "r").read(),
+                    Parameters=my_params,
+                    Capabilities=[
+                        'CAPABILITY_IAM',
+                    ],
+                )
+            except Exception as e:
+                print(e)
+                #If we're in the exception, the stack does not exist and we should create it.  Try/Catch blocks are not meant for flow control, but I'm not about to list all of the CFN stacks in an account just to see if this one stack exists every time we do a deploy.
+                print ("Creating CloudFormation Stack for " + rule_name)
+                response = my_cfn.create_stack(
+                    StackName=rule_name,
+                    TemplateBody=open(cfn_body, "r").read(),
+                    Parameters=my_params,
+                    Capabilities=[
+                        'CAPABILITY_IAM',
+                    ],
+                )
+
+            #wait for changes to propagate.
+            in_progress = True
+            while in_progress:
+                print("Waiting for CloudFormation stack deployment...")
+                time.sleep(5)
+                my_stack = my_cfn.describe_stacks(StackName=rule_name)
+                #print(my_stack)
+                if 'IN_PROGRESS' not in my_stack['Stacks'][0]['StackStatus']:
+                    in_progress = False
 
         print('Config deploy complete.')
 
@@ -263,15 +311,7 @@ class RDK():
         imp.load_source('rule_util', util_path)
 
         #Construct our list of rules to test.
-        rule_names = []
-        if self.args.all:
-            for dir_name in os.listdir('.'):
-                code_file = dir_name + ".py"
-                if code_file in os.listdir(dir_name):
-                    rule_names.append(dir_name)
-        else:
-            rule_names.append(self.args.rulename[0])
-
+        rule_names = self.get_rule_list_for_command()
 
         for rule_name in rule_names:
             #Dynamically import the custom rule code, so that we can run the evaluate_compliance function.
@@ -309,9 +349,7 @@ class RDK():
     def test_remote(self):
         print ("Running test_remote!")
         return 0
-    def deploy(self):
-        print ("Running create!")
-        return 0
+
     def status(self):
         print ("Running status!")
         return 0
@@ -329,6 +367,18 @@ class RDK():
             session_args['aws_secret_access_key']=self.args.secret_access_key
 
         return boto3.session.Session(**session_args)
+
+    def get_rule_list_for_command(self):
+        rule_names = []
+        if self.args.all:
+            for dir_name in os.listdir('.'):
+                code_file = dir_name + ".py"
+                if code_file in os.listdir(dir_name):
+                    rule_names.append(dir_name)
+        else:
+            rule_names.append(self.args.rulename[0])
+
+        return rule_names
 
 class TestCI():
     def __init__(self, ci_type):
