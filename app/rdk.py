@@ -124,12 +124,9 @@ class RDK():
     #TODO: roll-back directory creation on failure.
     def create(self):
         print ("Running create!")
-        parser = argparse.ArgumentParser(prog='rdk create')
-        parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
-        parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
-        parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
-        parser.add_argument('rulename', metavar='<rulename>', nargs='*', help='Rule name(s) (required for some commands)')
-        self.args = parser.parse_args(self.args.command_args, self.args)
+
+        #Parse the command-line arguments relevant for creating a Config Rule.
+        self._parse_rule_args()
 
         if len(self.args.rulename) > 1:
             print("'create' command requires only one rule name.")
@@ -160,34 +157,30 @@ class RDK():
         dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], util_filename)
         shutil.copyfile(src, dst)
 
-        #create custom session based on whatever credentials are available to us
-        my_session = self.get_boto_session()
-
-        #get accountID
-        my_sts = my_session.client('sts')
-        response = my_sts.get_caller_identity()
-        account_id = response['Account']
-
-        #create config file and place in rule directory
-        parameters = {
-            'RuleName': self.args.rulename[0],
-            'SourceRuntime': self.args.runtime,
-            'CodeBucket': code_bucket_prefix + account_id,
-            'CodeKey': self.args.rulename[0]+'.zip'
-        }
-
-        if self.args.event:
-            parameters['SourceEvents'] = self.args.event
-        if self.args.periodic:
-            parameters['SourcePeriodic'] = self.args.periodic
-
-        my_params = {"Parameters": parameters}
-        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], parameter_file_name)
-        parameters_file = open(params_file_path, 'w')
-        json.dump(my_params, parameters_file)
-        parameters_file.close()
+        #Write the parameters to a file in the rule directory.
+        self._write_params_file()
 
         return 0
+
+    def modify(self):
+        #TODO: Allow for modifying a single attribute
+        print("Running modify!")
+
+        #Parse the command-line arguments necessary for modifying a Config Rule.
+        self._parse_rule_args()
+
+        if len(self.args.rulename) > 1:
+            print("'modfy' command requires only one rule name.")
+            return 1
+
+        if not self.args.runtime:
+            print("Runtime is required for 'modify' command.")
+            return 1
+
+        #Write the parameters to a file in the rule directory.
+        self._write_params_file()
+
+        print ("Modified Rule '"+self.args.rulename+"'")
 
     def deploy(self):
         #run the deploy code
@@ -249,7 +242,7 @@ class RDK():
                     'ParameterValue': my_json['Parameters']['SourcePeriodic'],
                 }]
 
-            #deploy config rule
+            #deploy config rule TODO: better detection of existing rules and update/create decision logic
             cfn_body = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, "configRole.json")
             my_cfn = my_session.client('cloudformation')
 
@@ -278,7 +271,7 @@ class RDK():
                     ],
                 )
 
-            #wait for changes to propagate.
+            #wait for changes to propagate. TODO: detect and report failures
             in_progress = True
             while in_progress:
                 print("Waiting for CloudFormation stack deployment...")
@@ -379,6 +372,42 @@ class RDK():
             rule_names.append(self.args.rulename[0])
 
         return rule_names
+
+    def _parse_rule_args(self):
+        parser = argparse.ArgumentParser(prog='rdk create')
+        parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
+        parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
+        parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
+    def _write_params_file(self):
+        #create custom session based on whatever credentials are available to us
+        my_session = self.get_boto_session()
+
+        #get accountID
+        my_sts = my_session.client('sts')
+        response = my_sts.get_caller_identity()
+        account_id = response['Account']
+
+        #create config file and place in rule directory
+        parameters = {
+            'RuleName': self.args.rulename[0],
+            'SourceRuntime': self.args.runtime,
+            'CodeBucket': code_bucket_prefix + account_id,
+            'CodeKey': self.args.rulename[0]+'.zip'
+        }
+
+        if self.args.event:
+            parameters['SourceEvents'] = self.args.event
+        if self.args.periodic:
+            parameters['SourcePeriodic'] = self.args.periodic
+
+        my_params = {"Parameters": parameters}
+        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], parameter_file_name)
+        parameters_file = open(params_file_path, 'w')
+        json.dump(my_params, parameters_file)
+        parameters_file.close()
 
 class TestCI():
     def __init__(self, ci_type):

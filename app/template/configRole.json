@@ -29,7 +29,8 @@
       "Description": "Execution Frequency",
       "Type": "String",
       "MinLength": "1",
-      "MaxLength": "255"
+      "MaxLength": "255",
+      "Default": "TwentyFour_Hours"
     }
   },
   "Resources": {
@@ -77,7 +78,11 @@
           }, {
             "EventSource": "aws.config",
             "MessageType": "OversizedConfigurationItemChangeNotification"
-          }]
+          }, {
+            "EventSource": "aws.config",
+            "MessageType": "ScheduledNotification",
+            "MaximumExecutionFrequency": { "Ref": "SourcePeriodic"}
+            }]
         }
       }
     },
