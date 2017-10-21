@@ -7,6 +7,8 @@ import time
 import imp
 import argparse
 from botocore.exceptions import ClientError
+from datetime import datetime
+import base64
 
 rdk_dir = '.rdk'
 rules_dir = ''
@@ -22,6 +24,7 @@ code_bucket_prefix = 'config-rule-code-bucket-'
 parameter_file_name = 'parameters.json'
 example_ci_dir = 'example_ci'
 test_ci_filename = 'test_ci.json'
+event_template_filename = 'test_event_template.json'
 
 class RDK():
     def __init__(self, args):
@@ -276,20 +279,7 @@ class RDK():
                     else:
                         raise
 
-                #Since CFN won't detect changes to the lambda code stored in S3 as a reason to update the stack, we need to manually update the code reference in Lambda once the CFN has run.
-                self._wait_for_cfn_stack(my_cfn, rule_name)
-
-                #Lamba function is an output of the stack.
-                my_updated_stack = my_cfn.describe_stacks(StackName=rule_name)
-                cfn_outputs = my_updated_stack['Stacks'][0]['Outputs']
-                my_lambda_arn = 'NOTFOUND'
-                for output in cfn_outputs:
-                    if output['OutputKey'] == 'RuleCodeLambda':
-                        my_lambda_arn = output['OutputValue']
-
-                if my_lambda_arn == 'NOTFOUND':
-                    print("Could not read CloudFormation stack output to find Lambda function.")
-                    return 1
+                my_lambda_arn = self._get_lambda_arn_for_rule(rule_name)
 
                 print("Publishing Lambda code...")
                 my_lambda_client = my_session.client('lambda')
@@ -322,18 +312,7 @@ class RDK():
 
     def test_local(self):
         print ("Running test_local!")
-        parser = argparse.ArgumentParser(prog='rdk test-local')
-        parser.add_argument('rulename', metavar='<rulename>[,<rulename>,...]', nargs='*', help='Rule name(s) to test')
-        parser.add_argument('--all','-a', action='store_true', help="Test will be run against all rules in the working directory.")
-        parser.add_argument('--test-ci-json', '-j', help="[optional] JSON for test CI for testing.")
-        parser.add_argument('--test-ci-types', '-t', help="[optional] CI type to use for testing.")
-        parser.add_argument('--test-parameters', '-p', help="[optional] JSON for Config parameters for testing.")
-        self.args = parser.parse_args(self.args.command_args, self.args)
-
-        if self.args.all and self.args.rulename:
-            print("You may specify either specific rules or --all, but not both.")
-            return 1
-
+        self._parse_test_args()
 
         #Dynamically import the shared rule_util module.
         util_path = os.path.join(rdk_dir, "rule_util.py")
@@ -350,7 +329,7 @@ class RDK():
             module = imp.load_source(module_name, module_path)
 
             #Get CI JSON from either the CLI or one of the stored templates.
-            my_cis = self._get_local_test_CIs(rule_name)
+            my_cis = self._get_test_CIs(rule_name)
 
             #Get Config parameters from the CLI if provided, otherwise leave dict empty.
             #TODO: currently very picky about JSON punctuation - can we make this more generous on inputs?
@@ -372,6 +351,55 @@ class RDK():
 
     def test_remote(self):
         print ("Running test_remote!")
+        self._parse_test_args()
+
+        #Construct our list of rules to test.
+        rule_names = self.get_rule_list_for_command()
+
+        #Create our Lambda client.
+        my_session = self.get_boto_session()
+        my_lambda_client = my_session.client('lambda')
+
+        for rule_name in rule_names:
+            print("Testing "+rule_name)
+
+            #Get CI JSON from either the CLI or one of the stored templates.
+            my_cis = self._get_test_CIs(rule_name)
+
+            my_parameters = {}
+            if self.args.test_parameters:
+                #print (self.args.test_parameters)
+                my_parameters = json.loads(self.args.test_parameters)
+
+            for my_ci in my_cis:
+                print ("\t\tTesting CI " + my_ci['resourceType'])
+
+                #Generate test event from templates
+                test_event = json.load(open(os.path.join(rdk_dir, event_template_filename), 'r'), strict=False)
+                my_invoking_event = json.loads(test_event['invokingEvent'])
+                my_invoking_event['configurationItem'] = my_ci
+                my_invoking_event['notificationCreationTime'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                test_event['invokingEvent'] = json.dumps(my_invoking_event)
+                test_event['ruleParameters'] = json.dumps(my_parameters)
+
+                #Get the Lambda function associated with the Rule
+                my_lambda_arn = self._get_lambda_arn_for_rule(rule_name)
+
+                #Call Lambda function with test event.
+                result = my_lambda_client.invoke(
+                    FunctionName=my_lambda_arn,
+                    InvocationType='RequestResponse',
+                    LogType='Tail',
+                    Payload=json.dumps(test_event)
+                )
+
+                #If there's an error dump execution logs to stdout, if not print out the value returned by the lambda function.
+                if 'FunctionError' in result:
+                    print(base64.b64decode(str(result['LogResult'])))
+                else:
+                    print("\t\t\t" + result['Payload'].read())
+                    if self.args.verbose:
+                        print(base64.b64decode(str(result['LogResult'])))
         return 0
 
     def status(self):
@@ -414,13 +442,27 @@ class RDK():
         return my_json['Parameters']
 
     def _parse_rule_args(self):
-        parser = argparse.ArgumentParser(prog='rdk create')
+        parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
         parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
         parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
         parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
         parser.add_argument('--input-parameters', '-i', help="[optional] JSON for Config parameters for testing.")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         self.args = parser.parse_args(self.args.command_args, self.args)
+
+    def _parse_test_args(self):
+        parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
+        parser.add_argument('rulename', metavar='<rulename>[,<rulename>,...]', nargs='*', help='Rule name(s) to test')
+        parser.add_argument('--all','-a', action='store_true', help="Test will be run against all rules in the working directory.")
+        parser.add_argument('--test-ci-json', '-j', help="[optional] JSON for test CI for testing.")
+        parser.add_argument('--test-ci-types', '-t', help="[optional] CI type to use for testing.")
+        parser.add_argument('--test-parameters', '-p', help="[optional] JSON for Config parameters for testing.")
+        parser.add_argument('--verbose', '-v', action='store_true', help='Enable full log output')
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
+        if self.args.all and self.args.rulename:
+            print("You may specify either specific rules or --all, but not both.")
+            return 1
 
     def _write_params_file(self):
         #create custom session based on whatever credentials are available to us
@@ -462,7 +504,7 @@ class RDK():
                 print("Waiting for CloudFormation stack operation to complete...")
                 time.sleep(5)
 
-    def _get_local_test_CIs(self, rulename):
+    def _get_test_CIs(self, rulename):
         test_ci_list = []
         if self.args.test_ci_json:
             print ("Testing with supplied CI JSON - NOT YET IMPLEMENTED") #TODO
@@ -496,6 +538,29 @@ class RDK():
                     test_ci_list.append(my_test_ci.get_json())
 
         return test_ci_list
+
+    def _get_lambda_arn_for_rule(self, rulename):
+        #create custom session based on whatever credentials are available to us
+        my_session = self.get_boto_session()
+
+        my_cfn = my_session.client('cloudformation')
+
+        #Since CFN won't detect changes to the lambda code stored in S3 as a reason to update the stack, we need to manually update the code reference in Lambda once the CFN has run.
+        self._wait_for_cfn_stack(my_cfn, rulename)
+
+        #Lamba function is an output of the stack.
+        my_updated_stack = my_cfn.describe_stacks(StackName=rulename)
+        cfn_outputs = my_updated_stack['Stacks'][0]['Outputs']
+        my_lambda_arn = 'NOTFOUND'
+        for output in cfn_outputs:
+            if output['OutputKey'] == 'RuleCodeLambda':
+                my_lambda_arn = output['OutputValue']
+
+        if my_lambda_arn == 'NOTFOUND':
+            print("Could not read CloudFormation stack output to find Lambda function.")
+            sys.exit(1)
+
+        return my_lambda_arn
 
     #def _load_cis_from_file(self, filename):
     #    my_cis = []
