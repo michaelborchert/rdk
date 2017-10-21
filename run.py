@@ -10,7 +10,7 @@ if __name__ == "__main__":
     parser.add_argument('--secret-access-key', '-s', help="[optional] Secret Access Key to use.")
     parser.add_argument('--region','-r', default='ap-southeast-1', help='Select the region to run against.  Defaults to ap-southeast-1.')
     parser.add_argument('--verbose','-v', action='count')
-    parser.add_argument('command', metavar='<command>', help='Command to run.', choices=['init', 'create', 'modify', 'deploy', 'test_local', 'test_remote', 'status'])
+    parser.add_argument('command', metavar='<command>', help='Command to run.', choices=['init', 'create', 'modify', 'deploy', 'test-local', 'test-remote', 'status'])
     parser.add_argument('command_args', metavar='<command arguments>', nargs=argparse.REMAINDER)
 
     args = parser.parse_args()

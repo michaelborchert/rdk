@@ -25,6 +25,7 @@ APPLICABLE_RESOURCES = ["AWS::EC2::Instance"]
 # If the resource is not an instance, then we deem this resource to be not applicable. (If the scope of the rule is specified to include only
 # instances, this rule would never have been invoked.)
 def evaluate_compliance(configuration_item, rule_parameters):
+    #print(json.dumps(configuration_item))
     if configuration_item['resourceType'] not in APPLICABLE_RESOURCES:
         return 'NOT_APPLICABLE'
     elif rule_parameters['desiredInstanceType'] != configuration_item['configuration']['instanceType']:

@@ -138,8 +138,8 @@
   },
 
   "Outputs": {
-    "RoleCodeLambda": {
-      "Description": "ARN for the Role Code lambda",
+    "RuleCodeLambda": {
+      "Description": "ARN for the Rule Code lambda",
       "Value": { "Fn::GetAtt": [ "rdkRuleCodeLambda", "Arn" ] }
     }
   }

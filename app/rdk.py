@@ -6,6 +6,7 @@ import json
 import time
 import imp
 import argparse
+from botocore.exceptions import ClientError
 
 rdk_dir = '.rdk'
 rules_dir = ''
@@ -20,13 +21,14 @@ delivery_permission_policy_file = 'deliveryPermissionsPolicy.json'
 code_bucket_prefix = 'config-rule-code-bucket-'
 parameter_file_name = 'parameters.json'
 example_ci_dir = 'example_ci'
+test_ci_filename = 'test_ci.json'
 
 class RDK():
     def __init__(self, args):
         self.args = args
 
     def process_command(self):
-        method_to_call = getattr(self, self.args.command)
+        method_to_call = getattr(self, self.args.command.replace('-','_'))
         exit_code = method_to_call()
 
         return(exit_code)
@@ -188,7 +190,7 @@ class RDK():
 
         parser = argparse.ArgumentParser(prog='rdk create')
         parser.add_argument('rulename', metavar='<rulename>', nargs='*', help='Rule name(s) to deploy')
-        parser.add_argument('--all','-a', help="All rules in the working directory will be deployed.")
+        parser.add_argument('--all','-a', action='store_true', help="All rules in the working directory will be deployed.")
         self.args = parser.parse_args(self.args.command_args, self.args)
 
         rule_names = self.get_rule_list_for_command()
@@ -215,10 +217,7 @@ class RDK():
 
             #create CFN Parameters
             #read rest of params from file in rule directory
-            params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rule_name, parameter_file_name)
-            parameters_file = open(params_file_path, 'r')
-            my_json = json.load(parameters_file)
-            parameters_file.close()
+            my_rule_params = self._get_rule_parameters(rule_name)
 
             my_params = [
                 {
@@ -231,15 +230,15 @@ class RDK():
                 },
                 {
                     'ParameterKey': 'SourceRuntime',
-                    'ParameterValue': my_json['Parameters']['SourceRuntime'],
+                    'ParameterValue': my_rule_params['SourceRuntime'],
                 },
                 {
                     'ParameterKey': 'SourceEvents',
-                    'ParameterValue': my_json['Parameters']['SourceEvents'],
+                    'ParameterValue': my_rule_params['SourceEvents'],
                 },
                 {
                     'ParameterKey': 'SourcePeriodic',
-                    'ParameterValue': my_json['Parameters']['SourcePeriodic'],
+                    'ParameterValue': my_rule_params['SourcePeriodic'],
                 }]
 
             #deploy config rule TODO: better detection of existing rules and update/create decision logic
@@ -250,16 +249,53 @@ class RDK():
                 my_stack = my_cfn.describe_stacks(StackName=rule_name)
                 #If we've gotten here, stack exists and we should update it.
                 print ("Updating CloudFormation Stack for " + rule_name)
-                response = my_cfn.update_stack(
-                    StackName=rule_name,
-                    TemplateBody=open(cfn_body, "r").read(),
-                    Parameters=my_params,
-                    Capabilities=[
-                        'CAPABILITY_IAM',
-                    ],
+                try:
+                    response = my_cfn.update_stack(
+                        StackName=rule_name,
+                        TemplateBody=open(cfn_body, "r").read(),
+                        Parameters=my_params,
+                        Capabilities=[
+                            'CAPABILITY_IAM',
+                        ],
+                    )
+                except ClientError as e:
+                    if e.response['Error']['Code'] == 'ValidationError':
+                        if 'No updates are to be performed.' in str(e):
+                            #No changes made to Config rule definition, so CloudFormation won't do anything.
+                            print("No changes to Config Rule.")
+                        else:
+                            #Something unexpected has gone wrong.  Emit an error and bail.
+                            print(e)
+                            return 1
+                    else:
+                        raise
+
+                #Since CFN won't detect changes to the lambda code stored in S3 as a reason to update the stack, we need to manually update the code reference in Lambda once the CFN has run.
+                self._wait_for_cfn_stack(my_cfn, rule_name)
+
+                #Lamba function is an output of the stack.
+                my_updated_stack = my_cfn.describe_stacks(StackName=rule_name)
+                cfn_outputs = my_updated_stack['Stacks'][0]['Outputs']
+                my_lambda_arn = 'NOTFOUND'
+                for output in cfn_outputs:
+                    if output['OutputKey'] == 'RuleCodeLambda':
+                        my_lambda_arn = output['OutputValue']
+
+                if my_lambda_arn == 'NOTFOUND':
+                    print("Could not read CloudFormation stack output to find Lambda function.")
+                    return 1
+
+                print("Publishing Lambda code...")
+                my_lambda_client = my_session.client('lambda')
+                my_lambda_client.update_function_code(
+                    FunctionName=my_lambda_arn,
+                    S3Bucket=code_bucket_name,
+                    S3Key=s3_dst,
+                    Publish=True
                 )
-            except Exception as e:
-                print(e)
+                print("Lambda code updated.")
+                return 0
+            except ClientError as e:
                 #If we're in the exception, the stack does not exist and we should create it.  Try/Catch blocks are not meant for flow control, but I'm not about to list all of the CFN stacks in an account just to see if this one stack exists every time we do a deploy.
                 print ("Creating CloudFormation Stack for " + rule_name)
                 response = my_cfn.create_stack(
@@ -272,14 +308,7 @@ class RDK():
                 )
 
             #wait for changes to propagate. TODO: detect and report failures
-            in_progress = True
-            while in_progress:
-                print("Waiting for CloudFormation stack deployment...")
-                time.sleep(5)
-                my_stack = my_cfn.describe_stacks(StackName=rule_name)
-                #print(my_stack)
-                if 'IN_PROGRESS' not in my_stack['Stacks'][0]['StackStatus']:
-                    in_progress = False
+            self._wait_for_cfn_stack(my_cfn, rulename)
 
         print('Config deploy complete.')
 
@@ -288,16 +317,17 @@ class RDK():
     def test_local(self):
         print ("Running test_local!")
         parser = argparse.ArgumentParser(prog='rdk test-local')
-        parser.add_argument('rulenames', metavar='<rulename>[,<rulename>,...]', nargs='*', help='Rule name(s) to test')
-        parser.add_argument('--all','-a', help="Test will be run against all rules in the working directory.")
+        parser.add_argument('rulename', metavar='<rulename>[,<rulename>,...]', nargs='*', help='Rule name(s) to test')
+        parser.add_argument('--all','-a', action='store_true', help="Test will be run against all rules in the working directory.")
         parser.add_argument('--test-ci-json', '-j', help="[optional] JSON for test CI for testing.")
         parser.add_argument('--test-ci-types', '-t', help="[optional] CI type to use for testing.")
         parser.add_argument('--test-parameters', '-p', help="[optional] JSON for Config parameters for testing.")
         self.args = parser.parse_args(self.args.command_args, self.args)
 
-        if self.args.all and self.args.rulename[0]:
-            print("You may specify either a single rule or --all, but not both.")
+        if self.args.all and self.args.rulename:
+            print("You may specify either specific rules or --all, but not both.")
             return 1
+
 
         #Dynamically import the shared rule_util module.
         util_path = os.path.join(rdk_dir, "rule_util.py")
@@ -307,35 +337,30 @@ class RDK():
         rule_names = self.get_rule_list_for_command()
 
         for rule_name in rule_names:
+            print("Testing "+rule_name)
             #Dynamically import the custom rule code, so that we can run the evaluate_compliance function.
             module_path = os.path.join(".", os.path.dirname(rules_dir), rule_name, rule_name+".py")
             module_name = str(rule_name).lower()
             module = imp.load_source(module_name, module_path)
 
             #Get CI JSON from either the CLI or one of the stored templates.
-            my_ci = {}
-            if self.args.test_ci_json:
-                my_ci = self.args.test_ci_json
-            else:
-                if self.args.test_ci_type:
-                    my_ci_obj = TestCI(self.args.test_ci_type)
-                    my_ci = my_ci_obj.get_json()
-                else:
-                    print("You must specify either a test CI resource type or provide a valid JSON document")
-                    return 1
+            my_cis = self._get_local_test_CIs(rule_name)
 
             #Get Config parameters from the CLI if provided, otherwise leave dict empty.
             #TODO: currently very picky about JSON punctuation - can we make this more generous on inputs?
+            #TODO: Need better error outputs to make it clear that issues are in the lambda code, not the RDK.
             my_parameters = {}
             if self.args.test_parameters:
-                print (self.args.test_parameters)
+                #print (self.args.test_parameters)
                 my_parameters = json.loads(self.args.test_parameters)
 
             #Execute the evaluate_compliance function
-            print(my_ci)
-            print(my_parameters)
-            result = getattr(module, 'evaluate_compliance')(my_ci, my_parameters)
-            print(result)
+            for my_ci in my_cis:
+                #print(my_ci)
+                #print(my_parameters)
+                print ("\t\tTesting CI " + my_ci['resourceType'])
+                result = getattr(module, 'evaluate_compliance')(my_ci, my_parameters)
+                print("\t\t\t"+result)
 
         return 0
 
@@ -364,14 +389,23 @@ class RDK():
     def get_rule_list_for_command(self):
         rule_names = []
         if self.args.all:
-            for dir_name in os.listdir('.'):
-                code_file = dir_name + ".py"
-                if code_file in os.listdir(dir_name):
-                    rule_names.append(dir_name)
+            d = '.'
+            for obj_name in os.listdir('.'):
+                if os.path.isdir(os.path.join('.', obj_name)):
+                    code_file = obj_name + ".py"
+                    if code_file in os.listdir(obj_name):
+                        rule_names.append(obj_name)
         else:
             rule_names.append(self.args.rulename[0])
 
         return rule_names
+
+    def _get_rule_parameters(self, rule_name):
+        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rule_name, parameter_file_name)
+        parameters_file = open(params_file_path, 'r')
+        my_json = json.load(parameters_file)
+        parameters_file.close()
+        return my_json['Parameters']
 
     def _parse_rule_args(self):
         parser = argparse.ArgumentParser(prog='rdk create')
@@ -408,6 +442,56 @@ class RDK():
         parameters_file = open(params_file_path, 'w')
         json.dump(my_params, parameters_file)
         parameters_file.close()
+
+    def _wait_for_cfn_stack(self, cfn_client, stackname):
+        in_progress = True
+        while in_progress:
+            my_stack = cfn_client.describe_stacks(StackName=stackname)
+            #print(my_stack)
+            if 'IN_PROGRESS' not in my_stack['Stacks'][0]['StackStatus']:
+                in_progress = False
+            else:
+                print("Waiting for CloudFormation stack operation to complete...")
+                time.sleep(5)
+
+    def _get_local_test_CIs(self, rulename):
+        test_ci_list = []
+        if self.args.test_ci_json:
+            print ("Testing with supplied CI JSON - NOT YET IMPLEMENTED") #TODO
+            #if "file://" in self.args.test_ci_json:
+            #    tests_path  = os.path.join(os.path.dirname(str(self.args.test_ci_json).replace('file://','')))
+            #    if os.path.exists(test_path):
+            #        test_ci_list = self._load_cis_from_file(test_path)
+            #    else:
+            #        print("Could not find specified file.")
+            #        sys.exit(1)
+            #else:
+            #    test_ci_list = json.loads()
+        elif self.args.test_ci_types:
+            print("\tTesting with generic CI for supplied Resource Type(s)")
+            ci_types = self.args.test_ci_types.split(",")
+            for ci_type in ci_types:
+                my_test_ci = TestCI(ci_type)
+                test_ci_list.append(my_test_ci.get_json())
+        else:
+            #Check to see if there is a test_ci.json file in the Rule directory
+            tests_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rulename, test_ci_filename)
+            if os.path.exists(tests_path):
+                print("\tTesting with CI's provided in test_ci.json file. NOT YET IMPLEMENTED") #TODO
+            #    test_ci_list self._load_cis_from_file(tests_path)
+            else:
+                print("\tTesting with generic CI for configured Resource Type(s)")
+                my_rule_params = self._get_rule_parameters(rulename)
+                ci_types = str(my_rule_params['SourceEvents']).split(",")
+                for ci_type in ci_types:
+                    my_test_ci = TestCI(ci_type)
+                    test_ci_list.append(my_test_ci.get_json())
+
+        return test_ci_list
+
+    #def _load_cis_from_file(self, filename):
+    #    my_cis = []
+    #    return my_cis
 
 class TestCI():
     def __init__(self, ci_type):
