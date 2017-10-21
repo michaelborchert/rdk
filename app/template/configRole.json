@@ -31,6 +31,11 @@
       "MinLength": "1",
       "MaxLength": "255",
       "Default": "TwentyFour_Hours"
+    },
+    "SourceInputParameters": {
+      "Description": "Input Parameters",
+      "Type": "String",
+      "Default": "{}"
     }
   },
   "Resources": {
@@ -42,7 +47,7 @@
           "S3Key": { "Fn::Sub": "${AWS::StackName}/${AWS::StackName}.zip" }
         },
         "Description": "Create a new AWS lambda function for rule code",
-        "Handler": "rule_code.lambda_handler",
+        "Handler": { "Fn::Sub": "${AWS::StackName}.lambda_handler"},
         "MemorySize": "128",
         "Role":  { "Fn::GetAtt": [ "rdkConfigRuleRole", "Arn" ] } ,
         "Runtime": { "Ref": "SourceRuntime"},
@@ -83,7 +88,8 @@
             "MessageType": "ScheduledNotification",
             "MaximumExecutionFrequency": { "Ref": "SourcePeriodic"}
             }]
-        }
+        },
+        "InputParameters": { "Ref": "SourceInputParameters" }
       }
     },
     "rdkConfigRuleRole": {

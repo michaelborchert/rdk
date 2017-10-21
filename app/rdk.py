@@ -130,9 +130,10 @@ class RDK():
         #Parse the command-line arguments relevant for creating a Config Rule.
         self._parse_rule_args()
 
-        if len(self.args.rulename) > 1:
-            print("'create' command requires only one rule name.")
-            return 1
+        #Should no longer be necessary.
+        #if len(self.args.rulename) > 1:
+        #    print("'create' command requires only one rule name.")
+        #    return 1
 
         #if self.args.event and self.args.periodic:
         #    print("Either the 'Event' flag or the 'Periodic' flag may be set, but not both.")
@@ -143,20 +144,20 @@ class RDK():
             return 1
 
         #create rule directory.
-        rule_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0])
+        rule_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename)
         if os.path.exists(rule_path):
             print("Rule already exists.")
             return 1
 
-        os.makedirs(os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0]))
+        os.makedirs(os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename))
 
         #copy rule.py template into rule directory
         src = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, rule_handler)
-        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], self.args.rulename[0]+".py")
+        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename, self.args.rulename+".py")
         shutil.copyfile(src, dst)
 
         src = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, util_filename)
-        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], util_filename)
+        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename, util_filename)
         shutil.copyfile(src, dst)
 
         #Write the parameters to a file in the rule directory.
@@ -171,9 +172,10 @@ class RDK():
         #Parse the command-line arguments necessary for modifying a Config Rule.
         self._parse_rule_args()
 
-        if len(self.args.rulename) > 1:
-            print("'modfy' command requires only one rule name.")
-            return 1
+        #Should no longer be needed
+        #if len(self.args.rulename) > 1:
+        #    print("'modfy' command requires only one rule name.")
+        #    return 1
 
         if not self.args.runtime:
             print("Runtime is required for 'modify' command.")
@@ -239,6 +241,10 @@ class RDK():
                 {
                     'ParameterKey': 'SourcePeriodic',
                     'ParameterValue': my_rule_params['SourcePeriodic'],
+                },
+                {
+                    'ParameterKey': 'SourceInputParameters',
+                    'ParameterValue': my_rule_params['InputParameters'],
                 }]
 
             #deploy config rule TODO: better detection of existing rules and update/create decision logic
@@ -412,6 +418,7 @@ class RDK():
         parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
         parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
         parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('--input-parameters', '-i', help="[optional] JSON for Config parameters for testing.")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         self.args = parser.parse_args(self.args.command_args, self.args)
 
@@ -426,10 +433,11 @@ class RDK():
 
         #create config file and place in rule directory
         parameters = {
-            'RuleName': self.args.rulename[0],
+            'RuleName': self.args.rulename,
             'SourceRuntime': self.args.runtime,
             'CodeBucket': code_bucket_prefix + account_id,
-            'CodeKey': self.args.rulename[0]+'.zip'
+            'CodeKey': self.args.rulename+'.zip',
+            'InputParameters': self.args.input_parameters
         }
 
         if self.args.event:
@@ -438,7 +446,7 @@ class RDK():
             parameters['SourcePeriodic'] = self.args.periodic
 
         my_params = {"Parameters": parameters}
-        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename[0], parameter_file_name)
+        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename, parameter_file_name)
         parameters_file = open(params_file_path, 'w')
         json.dump(my_params, parameters_file)
         parameters_file.close()

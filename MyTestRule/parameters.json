@@ -1,1 +1,1 @@
-{"Parameters": {"CodeKey": "MyTestRule.zip", "SourceRuntime": "python2.7", "CodeBucket": "config-rule-code-bucket-212591712841", "SourcePeriodic": "One_Hour", "SourceEvents": "AWS::EC2::Instance,AWS::EC2::Volume", "RuleName": "MyTestRule"}}
+{"Parameters": {"CodeKey": "MyTestRule.zip", "SourceRuntime": "python2.7", "CodeBucket": "config-rule-code-bucket-212591712841", "SourcePeriodic": "One_Hour", "RuleName": "MyTestRule", "SourceEvents": "AWS::EC2::Instance", "InputParameters": "{\"desiredInstanceType\":\"t2.micro\"}"}}

@@ -66,9 +66,12 @@ def is_applicable(configurationItem, event):
 # This decorates the lambda_handler in rule_code with the actual PutEvaluation call
 def rule_handler(lambda_handler):
     def handler_wrapper(event, context):
+        print(event)
         check_defined(event, 'event')
         invokingEvent = json.loads(event['invokingEvent'])
-        ruleParameters = json.loads(event['ruleParameters'])
+        ruleParameters = {}
+        if 'ruleParameters' in event:
+            ruleParameters = json.loads(event['ruleParameters'])
         configurationItem = get_configuration_item(invokingEvent)
         invokingEvent['configurationItem'] = configurationItem
         event['invokingEvent'] = json.dumps(invokingEvent)
