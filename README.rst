@@ -52,9 +52,9 @@ In your working directory, use the ``create`` command to start creating a new cu
 
 Edit and Test Rules Locally
 ---------------------------
-Once you have created the rule, edit the python file in your rule directory (in the above example it would be ``MyRule/MyRule.py``) to add whatever logic your Rule requires in the ``evaluate_compliance`` method.  You will have access to the CI that was sent by Config, as well as any parameters configured for the Config Rule.  Your function should return either ``COMPLIANT``, ``NONCOMPLIANT``, or ``NOT_APPLICABLE``.
+Once you have created the rule, edit the python file in your rule directory (in the above example it would be ``MyRule/MyRule.py``) to add whatever logic your Rule requires in the ``evaluate_compliance`` function.  You will have access to the CI that was sent by Config, as well as any parameters configured for the Config Rule.  Your function should return either ``COMPLIANT``, ``NONCOMPLIANT``, or ``NOT_APPLICABLE``.
 
-While you are editing your Rule code you can test against generic CI's (custom CI specification is coming) using the ``test-local`` command:
+While you are editing your Rule code you can test against generic CI's (custom CI specification is coming) using the ``test-local`` command::
 
   $ rdk test-local MyRule --test-parameters '{"desiredInstanceType":"t2.micro"}'
   Running test_local!
@@ -79,7 +79,7 @@ It is worth noting that until you actually call the ``deploy`` command your rule
 
 Deploy Rule
 -----------
-Once you have completed your compliance validation code and set your Rule's configuration, you can deploy the Rule to your account using the ``deploy`` command.  This will zip up your code (and the other associated code files) into a deployable package, copy that Zip file to S3, and then launch or update a CloudFormation stack that defines your Config Rule, Lambda function, and the necessary permissions and roles for it to function.  Since CloudFormation does not deeply inspect Lambda code objects in S3 to construct it's changeset, the ``deploy`` command will also directly update the Lambda function for any subsequent deployments to make sure code changes are propagated correctly.
+Once you have completed your compliance validation code and set your Rule's configuration, you can deploy the Rule to your account using the ``deploy`` command.  This will zip up your code (and the other associated code files) into a deployable package, copy that Zip file to S3, and then launch or update a CloudFormation stack that defines your Config Rule, Lambda function, and the necessary permissions and IAM Roles for it to function.  Since CloudFormation does not deeply inspect Lambda code objects in S3 to construct its changeset, the ``deploy`` command will also directly update the Lambda function for any subsequent deployments to make sure code changes are propagated correctly.
 
 ::
 
@@ -92,6 +92,8 @@ Once you have completed your compliance validation code and set your Rule's conf
   ...
   Waiting for CloudFormation stack operation to complete...
   Config deploy complete.
+
+Just like with ``test-local``, you can use the --all flag to deploy all of the rules in your working directory.
 
 Test Deployed Rule
 ------------------
