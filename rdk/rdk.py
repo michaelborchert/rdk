@@ -1,4 +1,5 @@
 import os
+from os import path
 import sys
 import shutil
 import boto3
@@ -26,7 +27,7 @@ example_ci_dir = 'example_ci'
 test_ci_filename = 'test_ci.json'
 event_template_filename = 'test_event_template.json'
 
-class RDK():
+class rdk():
     def __init__(self, args):
         self.args = args
 
@@ -48,7 +49,7 @@ class RDK():
             shutil.rmtree(rdk_dir)
 
         #copy contents of template directory into .rdk directory
-        src = os.path.join(os.path.dirname(sys.argv[0]), 'app', 'template')
+        src = os.path.join(path.dirname(__file__), 'template')
         dst = rdk_dir
         shutil.copytree(src, dst)
 
@@ -147,20 +148,20 @@ class RDK():
             return 1
 
         #create rule directory.
-        rule_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename)
+        rule_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename)
         if os.path.exists(rule_path):
             print("Rule already exists.")
             return 1
 
-        os.makedirs(os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename))
+        os.makedirs(os.path.join(os.getcwdu(), rules_dir, self.args.rulename))
 
         #copy rule.py template into rule directory
-        src = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, rule_handler)
-        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename, self.args.rulename+".py")
+        src = os.path.join(os.getcwdu(), rdk_dir, rule_handler)
+        dst = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, self.args.rulename+".py")
         shutil.copyfile(src, dst)
 
-        src = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, util_filename)
-        dst = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename, util_filename)
+        src = os.path.join(os.getcwdu(), rdk_dir, util_filename)
+        dst = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, util_filename)
         shutil.copyfile(src, dst)
 
         #Write the parameters to a file in the rule directory.
@@ -211,7 +212,7 @@ class RDK():
         for rule_name in rule_names:
             print ("Zipping " + rule_name)
             #zip rule code files and upload to s3 bucket
-            s3_src_dir = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rule_name)
+            s3_src_dir = os.path.join(os.getcwdu(), rules_dir, rule_name)
             s3_dst = os.path.join(rule_name, rule_name+".zip")
             s3_src = shutil.make_archive(rule_name, 'zip', s3_src_dir)
             code_bucket_name = code_bucket_prefix + account_id
@@ -251,7 +252,7 @@ class RDK():
                 }]
 
             #deploy config rule TODO: better detection of existing rules and update/create decision logic
-            cfn_body = os.path.join(os.path.dirname(sys.argv[0]), rdk_dir, "configRole.json")
+            cfn_body = os.path.join(os.getcwdu(), rdk_dir, "configRole.json")
             my_cfn = my_session.client('cloudformation')
 
             try:
@@ -304,7 +305,7 @@ class RDK():
                 )
 
             #wait for changes to propagate. TODO: detect and report failures
-            self._wait_for_cfn_stack(my_cfn, rulename)
+            self._wait_for_cfn_stack(my_cfn, rule_name)
 
         print('Config deploy complete.')
 
@@ -375,7 +376,7 @@ class RDK():
                 print ("\t\tTesting CI " + my_ci['resourceType'])
 
                 #Generate test event from templates
-                test_event = json.load(open(os.path.join(rdk_dir, event_template_filename), 'r'), strict=False)
+                test_event = json.load(open(os.path.join(os.getcwdu(), rdk_dir, event_template_filename), 'r'), strict=False)
                 my_invoking_event = json.loads(test_event['invokingEvent'])
                 my_invoking_event['configurationItem'] = my_ci
                 my_invoking_event['notificationCreationTime'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
@@ -425,7 +426,7 @@ class RDK():
         if self.args.all:
             d = '.'
             for obj_name in os.listdir('.'):
-                if os.path.isdir(os.path.join('.', obj_name)):
+                if os.path.isdir(os.path.join('.', obj_name)) and not obj_name == 'rdk':
                     code_file = obj_name + ".py"
                     if code_file in os.listdir(obj_name):
                         rule_names.append(obj_name)
@@ -435,7 +436,7 @@ class RDK():
         return rule_names
 
     def _get_rule_parameters(self, rule_name):
-        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rule_name, parameter_file_name)
+        params_file_path = os.path.join(os.getcwdu(), rules_dir, rule_name, parameter_file_name)
         parameters_file = open(params_file_path, 'r')
         my_json = json.load(parameters_file)
         parameters_file.close()
@@ -488,7 +489,7 @@ class RDK():
             parameters['SourcePeriodic'] = self.args.periodic
 
         my_params = {"Parameters": parameters}
-        params_file_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, self.args.rulename, parameter_file_name)
+        params_file_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, parameter_file_name)
         parameters_file = open(params_file_path, 'w')
         json.dump(my_params, parameters_file)
         parameters_file.close()
@@ -525,7 +526,7 @@ class RDK():
                 test_ci_list.append(my_test_ci.get_json())
         else:
             #Check to see if there is a test_ci.json file in the Rule directory
-            tests_path = os.path.join(os.path.dirname(sys.argv[0]), rules_dir, rulename, test_ci_filename)
+            tests_path = os.path.join(os.getcwdu(), rules_dir, rulename, test_ci_filename)
             if os.path.exists(tests_path):
                 print("\tTesting with CI's provided in test_ci.json file. NOT YET IMPLEMENTED") #TODO
             #    test_ci_list self._load_cis_from_file(tests_path)

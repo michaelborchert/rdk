@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
-import rdk
+from rdk import rdk
 
 if __name__ == "__main__":
     #Set up command-line argument parser.
@@ -16,6 +16,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    rdk = rdk.RDK(args)
-    return_val = rdk.process_command()
+    my_rdk = rdk.rdk(args)
+    return_val = my_rdk.process_command()
     exit(return_val)
