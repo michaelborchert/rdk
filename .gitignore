@@ -9,3 +9,6 @@
 
 # RDK init files.
 .rdk/*
+
+#pypi publishing config
+.pypirc
