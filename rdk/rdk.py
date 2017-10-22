@@ -483,7 +483,7 @@ class rdk():
         my_params = {"Parameters": parameters}
         params_file_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, parameter_file_name)
         parameters_file = open(params_file_path, 'w')
-        json.dump(my_params, parameters_file)
+        json.dump(my_params, parameters_file, indent=2)
         parameters_file.close()
 
     def _wait_for_cfn_stack(self, cfn_client, stackname):
