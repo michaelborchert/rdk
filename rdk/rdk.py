@@ -134,15 +134,6 @@ class rdk():
         #Parse the command-line arguments relevant for creating a Config Rule.
         self._parse_rule_args()
 
-        #Should no longer be necessary.
-        #if len(self.args.rulename) > 1:
-        #    print("'create' command requires only one rule name.")
-        #    return 1
-
-        #if self.args.event and self.args.periodic:
-        #    print("Either the 'Event' flag or the 'Periodic' flag may be set, but not both.")
-        #    return 1
-
         if not self.args.runtime:
             print("Runtime is required for 'create' command.")
             return 1
@@ -167,6 +158,7 @@ class rdk():
         #Write the parameters to a file in the rule directory.
         self._write_params_file()
 
+        print ("Local Rule files created.")
         return 0
 
     def modify(self):
@@ -214,7 +206,7 @@ class rdk():
             #zip rule code files and upload to s3 bucket
             s3_src_dir = os.path.join(os.getcwdu(), rules_dir, rule_name)
             s3_dst = os.path.join(rule_name, rule_name+".zip")
-            s3_src = shutil.make_archive(rule_name, 'zip', s3_src_dir)
+            s3_src = shutil.make_archive(os.path.join(rule_name, rule_name), 'zip', s3_src_dir)
             code_bucket_name = code_bucket_prefix + account_id
             my_s3 = my_session.resource('s3')
 
@@ -446,7 +438,7 @@ class rdk():
         parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
         parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
         parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
-        parser.add_argument('--event','-E', help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('--event','-E', required=True, help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
         parser.add_argument('--input-parameters', '-i', help="[optional] JSON for Config parameters for testing.")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         self.args = parser.parse_args(self.args.command_args, self.args)

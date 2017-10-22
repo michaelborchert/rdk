@@ -43,7 +43,7 @@ To use the RDK, create a directory that will be your working directory.  This sh
 
 Create Rules
 ------------
-In your working directory, use the ``create`` command to start creating a new custom rule.  You must specify the runtime for the lambda function that will back the Rule, This will add a new directory for the rule and populate it with several files, including a skeleton of your Lambda code.
+In your working directory, use the ``create`` command to start creating a new custom rule.  You must specify the runtime for the lambda function that will back the Rule, and you must also specify a resource type (or comma-separated list of types) that the Rule will evaluate.  This will add a new directory for the rule and populate it with several files, including a skeleton of your Lambda code.
 
 ::
 
