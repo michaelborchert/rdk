@@ -1,2 +1,3 @@
 include README.rst
 include rdk/template/*
+include rdk/template/example_ci/*
