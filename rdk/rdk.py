@@ -73,7 +73,12 @@ class rdk():
 
         if not bucket_exists:
             print('Creating Config bucket '+config_bucket_name )
-            my_s3.create_bucket(Bucket=config_bucket_name)
+            my_s3.create_bucket(
+                Bucket=config_bucket_name,
+                CreateBucketConfiguration={
+                    'LocationConstraint': my_session.region_name
+                }
+            )
 
         #create config role
         my_iam = my_session.client('iam')
@@ -122,7 +127,12 @@ class rdk():
 
         if not bucket_exists:
             print('Creating Code bucket '+code_bucket_name )
-            my_s3.create_bucket(Bucket=code_bucket_name)
+            my_s3.create_bucket(
+                Bucket=code_bucket_name,
+                CreateBucketConfiguration={
+                    'LocationConstraint': my_session.region_name
+                }
+            )
 
         #make sure lambda execution role exists - TODO
         return 0
