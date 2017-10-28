@@ -69,9 +69,18 @@ While you are editing your Rule code you can test against generic CI's (custom C
 
 you can run the same test on all Rules in the working directory using the ``--all`` flag.
 
+If you want to see what the JSON structure of a CI looks like for creating your logic, you can use
+
+::
+
+$ rdk sample-ci <Resource Type>
+
+to dump a formatted JSON document.
+
+
 Modify Rule
 -----------
-If you need to change the parameters of a Config rule in your working directory you can use the ``modify`` command.  This will overwrite all existing configuration for the rule.
+If you need to change the parameters of a Config rule in your working directory you can use the ``modify`` command.  Any parameters you specify will overwrite existing values, any that you do not specify will not be changed.
 
 ::
 
@@ -130,7 +139,7 @@ See also the list of [contributors](https://github.com/your/project/contributors
 License
 =======
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the Apache 2.0 License - see the [LICENSE.md](LICENSE.md) file for details
 
 Acknowledgments
 ===============
