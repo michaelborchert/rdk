@@ -142,7 +142,7 @@ class rdk():
         print ("Running create!")
 
         #Parse the command-line arguments relevant for creating a Config Rule.
-        self._parse_rule_args()
+        self._parse_rule_args(True)
 
         if not self.args.runtime:
             print("Runtime is required for 'create' command.")
@@ -176,16 +176,22 @@ class rdk():
         print("Running modify!")
 
         #Parse the command-line arguments necessary for modifying a Config Rule.
-        self._parse_rule_args()
+        self._parse_rule_args(False)
 
-        #Should no longer be needed
-        #if len(self.args.rulename) > 1:
-        #    print("'modfy' command requires only one rule name.")
-        #    return 1
+        #Get existing parameters
+        old_params = self._read_params_file()
 
-        if not self.args.runtime:
-            print("Runtime is required for 'modify' command.")
-            return 1
+        if not self.args.runtime and old_params['Parameters']['SourceRuntime']:
+            self.args.runtime = old_params['Parameters']['SourceRuntime']
+
+        if not self.args.periodic and old_params['Parameters']['SourcePeriodic']:
+            self.args.periodic = old_params['Parameters']['SourcePeriodic']
+
+        if not self.args.event and old_params['Parameters']['SourceEvents']:
+            self.args.event = old_params['Parameters']['SourceEvents']
+
+        if not self.args.input_parameters and old_params['Parameters']['InputParameters']:
+            self.args.input_parameters = old_params['Parameters']['InputParameters']
 
         #Write the parameters to a file in the rule directory.
         self._write_params_file()
@@ -210,7 +216,6 @@ class rdk():
         my_sts = my_session.client('sts')
         response = my_sts.get_caller_identity()
         account_id = response['Account']
-
         for rule_name in rule_names:
             print ("Zipping " + rule_name)
             #zip rule code files and upload to s3 bucket
@@ -293,7 +298,6 @@ class rdk():
                     Publish=True
                 )
                 print("Lambda code updated.")
-                return 0
             except ClientError as e:
                 #If we're in the exception, the stack does not exist and we should create it.  Try/Catch blocks are not meant for flow control, but I'm not about to list all of the CFN stacks in an account just to see if this one stack exists every time we do a deploy.
                 print ("Creating CloudFormation Stack for " + rule_name)
@@ -409,6 +413,14 @@ class rdk():
         print ("Running status!")
         return 0
 
+    def sample_ci(self):
+        parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
+        parser.add_argument('ci_type', metavar='<resource type>', help='Resource name (e.g. "AWS::EC2::Instance") to display a sample CI JSON document for.')
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
+        my_test_ci = TestCI(self.args.ci_type)
+        print(json.dumps(my_test_ci.get_json(), indent=4))
+
     def get_boto_session(self):
         session_args = {}
 
@@ -444,11 +456,11 @@ class rdk():
         parameters_file.close()
         return my_json['Parameters']
 
-    def _parse_rule_args(self):
+    def _parse_rule_args(self, is_required):
         parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
-        parser.add_argument('--runtime','-R', required=True, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
+        parser.add_argument('--runtime','-R', required=is_required, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
         parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
-        parser.add_argument('--event','-E', required=True, help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('--event','-E', required=is_required, help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
         parser.add_argument('--input-parameters', '-i', help="[optional] JSON for Config parameters for testing.")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         self.args = parser.parse_args(self.args.command_args, self.args)
@@ -495,6 +507,14 @@ class rdk():
         parameters_file = open(params_file_path, 'w')
         json.dump(my_params, parameters_file, indent=2)
         parameters_file.close()
+
+    def _read_params_file(self):
+        my_params = {}
+        params_file_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, parameter_file_name)
+        parameters_file = open(params_file_path, 'r')
+        my_params = json.load(parameters_file)
+        parameters_file.close()
+        return my_params
 
     def _wait_for_cfn_stack(self, cfn_client, stackname):
         in_progress = True
