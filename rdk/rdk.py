@@ -184,11 +184,11 @@ class rdk():
         if not self.args.runtime and old_params['Parameters']['SourceRuntime']:
             self.args.runtime = old_params['Parameters']['SourceRuntime']
 
-        if not self.args.periodic and old_params['Parameters']['SourcePeriodic']:
-            self.args.periodic = old_params['Parameters']['SourcePeriodic']
+        if not self.args.maximum_frequency and old_params['Parameters']['SourcePeriodic']:
+            self.args.maximum_frequency = old_params['Parameters']['SourcePeriodic']
 
-        if not self.args.event and old_params['Parameters']['SourceEvents']:
-            self.args.event = old_params['Parameters']['SourceEvents']
+        if not self.args.resource_types and old_params['Parameters']['SourceEvents']:
+            self.args.resource_types = old_params['Parameters']['SourceEvents']
 
         if not self.args.input_parameters and old_params['Parameters']['InputParameters']:
             self.args.input_parameters = old_params['Parameters']['InputParameters']
@@ -338,13 +338,10 @@ class rdk():
             #Get CI JSON from either the CLI or one of the stored templates.
             my_cis = self._get_test_CIs(rule_name)
 
-            #Get Config parameters from the CLI if provided, otherwise leave dict empty.
-            #TODO: currently very picky about JSON punctuation - can we make this more generous on inputs?
+            #Get Parameters from Rule config
             #TODO: Need better error outputs to make it clear that issues are in the lambda code, not the RDK.
-            my_parameters = {}
-            if self.args.test_parameters:
-                #print (self.args.test_parameters)
-                my_parameters = json.loads(self.args.test_parameters)
+            my_rule_params = self._get_rule_parameters(rule_name)
+            my_parameters = my_rule_params['InputParameters']
 
             #Execute the evaluate_compliance function
             for my_ci in my_cis:
@@ -459,8 +456,8 @@ class rdk():
     def _parse_rule_args(self, is_required):
         parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
         parser.add_argument('--runtime','-R', required=is_required, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
-        parser.add_argument('--periodic','-P', help='Execution period', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
-        parser.add_argument('--event','-E', required=is_required, help='Resources that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('--maximum-frequency','-m', help='Maximum execution frequency', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
+        parser.add_argument('--resource-types','-r', required=is_required, help='Resource types that trigger event-based rule evaluation') #TODO - add full list of supported resources
         parser.add_argument('--input-parameters', '-i', help="[optional] JSON for Config parameters for testing.")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         self.args = parser.parse_args(self.args.command_args, self.args)
@@ -471,7 +468,6 @@ class rdk():
         parser.add_argument('--all','-a', action='store_true', help="Test will be run against all rules in the working directory.")
         parser.add_argument('--test-ci-json', '-j', help="[optional] JSON for test CI for testing.")
         parser.add_argument('--test-ci-types', '-t', help="[optional] CI type to use for testing.")
-        parser.add_argument('--test-parameters', '-p', help="[optional] JSON for Config parameters for testing.")
         parser.add_argument('--verbose', '-v', action='store_true', help='Enable full log output')
         self.args = parser.parse_args(self.args.command_args, self.args)
 
@@ -507,10 +503,10 @@ class rdk():
             'InputParameters': json.dumps(my_input_params)
         }
 
-        if self.args.event:
-            parameters['SourceEvents'] = self.args.event
-        if self.args.periodic:
-            parameters['SourcePeriodic'] = self.args.periodic
+        if self.args.resource_types:
+            parameters['SourceEvents'] = self.args.resource_types
+        if self.args.maximum_frequency:
+            parameters['SourcePeriodic'] = self.args.maximum_frequency
 
         my_params = {"Parameters": parameters}
         params_file_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, parameter_file_name)
