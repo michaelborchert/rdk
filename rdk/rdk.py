@@ -10,6 +10,7 @@ import argparse
 from botocore.exceptions import ClientError
 from datetime import datetime
 import base64
+import ast
 
 rdk_dir = '.rdk'
 rules_dir = ''
@@ -172,7 +173,6 @@ class rdk():
         return 0
 
     def modify(self):
-        #TODO: Allow for modifying a single attribute
         print("Running modify!")
 
         #Parse the command-line arguments necessary for modifying a Config Rule.
@@ -488,13 +488,23 @@ class rdk():
         response = my_sts.get_caller_identity()
         account_id = response['Account']
 
+        my_input_params = {}
+
+        if self.args.input_parameters:
+            #Parse the input parameters to make sure it's valid json.  Be tolerant of quote usage in the input string.
+            try:
+                my_input_params = json.loads(self.args.input_parameters, strict=False)
+            except Exception as e:
+                print("Error parsing input parameter JSON.  Make sure your JSON keys and values are enclosed in double quotes and your input-parameters string is enclosed in single quotes.")
+                sys.exit(1)
+
         #create config file and place in rule directory
         parameters = {
             'RuleName': self.args.rulename,
             'SourceRuntime': self.args.runtime,
             'CodeBucket': code_bucket_prefix + account_id,
             'CodeKey': self.args.rulename+'.zip',
-            'InputParameters': self.args.input_parameters
+            'InputParameters': json.dumps(my_input_params)
         }
 
         if self.args.event:
