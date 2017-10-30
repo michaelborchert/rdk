@@ -40,6 +40,7 @@ class rdk():
 
     def init(self):
         #parser = argparse.ArgumentParser()
+        #parser.add_argument("--config-bucket", "-c", help='Bucket to )
         #self.args = parser.parse_args(self.args.command_args, self.args)
 
         #run the init code
@@ -58,65 +59,94 @@ class rdk():
         #create custom session based on whatever credentials are available to us
         my_session = self.get_boto_session()
 
+        #Create our ConfigService client
+        my_config = my_session.client('config')
+
         #get accountID
         my_sts = my_session.client('sts')
         response = my_sts.get_caller_identity()
         account_id = response['Account']
 
-        #create config bucket
-        config_bucket_name = config_bucket_prefix + account_id
-        my_s3 = my_session.client('s3')
-        response = my_s3.list_buckets()
-        bucket_exists = False
-        for bucket in response['Buckets']:
-            if bucket['Name'] == config_bucket_name:
-                bucket_exists = True
+        config_recorder_exists = False
+        config_recorder_name = ""
+        config_role_arn = ""
+        delivery_channel_exists = False
+        config_bucket_exists = False
+        #config_role_exists = False
 
-        if not bucket_exists:
-            print('Creating Config bucket '+config_bucket_name )
-            my_s3.create_bucket(
-                Bucket=config_bucket_name,
-                CreateBucketConfiguration={
-                    'LocationConstraint': my_session.region_name
-                }
-            )
+        #Check to see if the ConfigRecorder has been created.
+        recorders = my_config.describe_configuration_recorders()
+        if recorders:
+            config_recorder_exists = True
+            config_recorder_name = recorders['ConfigurationRecorders'][0]['name']
+            config_role_arn = recorders['ConfigurationRecorders'][0]['roleARN']
+            print("Found Config Recorder.")
+            print("Found Config Role: " + config_role_arn)
 
-        #create config role
-        my_iam = my_session.client('iam')
-        response = my_iam.list_roles()
-        role_exists = False
-        for role in response['Roles']:
-            if role['RoleName'] == config_role_name:
-                role_exists = True
+        delivery_channels = my_config.describe_delivery_channels()
+        if delivery_channels:
+            delivery_channel_exists = True
+            config_bucket_name = delivery_channels['DeliveryChannels'][0]['s3BucketName']
+            print("Found Bucket: " + config_bucket_name)
 
-        if not role_exists:
-            print('Creating IAM role config-role')
-            assume_role_policy = open(os.path.join(rdk_dir, assume_role_policy_file), 'r').read()
-            my_iam.create_role(RoleName=config_role_name, AssumeRolePolicyDocument=assume_role_policy)
+        if not config_bucket_exists:
+            #create config bucket
+            config_bucket_name = config_bucket_prefix + account_id
+            my_s3 = my_session.client('s3')
+            response = my_s3.list_buckets()
+            bucket_exists = False
+            for bucket in response['Buckets']:
+                if bucket['Name'] == config_bucket_name:
+                    bucket_exists = True
 
-        #attach role policy
-        my_iam.attach_role_policy(RoleName=config_role_name, PolicyArn='arn:aws:iam::aws:policy/service-role/AWSConfigRole')
-        policy_template = open(os.path.join(rdk_dir, delivery_permission_policy_file), 'r').read()
-        delivery_permissions_policy = policy_template.replace('ACCOUNTID', account_id)
-        my_iam.put_role_policy(RoleName=config_role_name, PolicyName='ConfigDeliveryPermissions', PolicyDocument=delivery_permissions_policy)
+            if not bucket_exists:
+                print('Creating Config bucket '+config_bucket_name )
+                my_s3.create_bucket(
+                    Bucket=config_bucket_name,
+                    CreateBucketConfiguration={
+                        'LocationConstraint': my_session.region_name
+                    }
+                )
 
-        #wait for changes to propagate. TODO: only do this if we had to create the role.
-        print('Waiting for IAM role to propagate')
-        time.sleep(16)
+        if not config_role_arn:
+            #create config role
+            my_iam = my_session.client('iam')
+            response = my_iam.list_roles()
+            role_exists = False
+            for role in response['Roles']:
+                if role['RoleName'] == config_role_name:
+                    role_exists = True
 
-        #create config recorder
-        my_config = my_session.client('config')
-        role_arn = "arn:aws:iam::"+account_id+":role/config-role"
-        my_config.put_configuration_recorder(ConfigurationRecorder={'name':'default', 'roleARN':role_arn, 'recordingGroup':{'allSupported':True, 'includeGlobalResourceTypes': True}})
+            if not role_exists:
+                print('Creating IAM role config-role')
+                assume_role_policy = open(os.path.join(rdk_dir, assume_role_policy_file), 'r').read()
+                my_iam.create_role(RoleName=config_role_name, AssumeRolePolicyDocument=assume_role_policy)
 
-        #create delivery channel
-        my_config.put_delivery_channel(DeliveryChannel={'name':'default', 's3BucketName':config_bucket_name, 'configSnapshotDeliveryProperties':{'deliveryFrequency':'Six_Hours'}})
+            #attach role policy
+            my_iam.attach_role_policy(RoleName=config_role_name, PolicyArn='arn:aws:iam::aws:policy/service-role/AWSConfigRole')
+            policy_template = open(os.path.join(rdk_dir, delivery_permission_policy_file), 'r').read()
+            delivery_permissions_policy = policy_template.replace('ACCOUNTID', account_id)
+            my_iam.put_role_policy(RoleName=config_role_name, PolicyName='ConfigDeliveryPermissions', PolicyDocument=delivery_permissions_policy)
 
-        print('Config setup complete.')
+            #wait for changes to propagate. TODO: only do this if we had to create the role.
+            print('Waiting for IAM role to propagate')
+            time.sleep(16)
+
+        #create or update config recorder
+        if not config_role_arn:
+            config_role_arn = "arn:aws:iam::"+account_id+":role/config-role"
+
+        my_config.put_configuration_recorder(ConfigurationRecorder={'name':'default', 'roleARN':config_role_arn, 'recordingGroup':{'allSupported':True, 'includeGlobalResourceTypes': True}})
+
+        if not delivery_channel_exists:
+            #create delivery channel
+            my_config.put_delivery_channel(DeliveryChannel={'name':'default', 's3BucketName':config_bucket_name, 'configSnapshotDeliveryProperties':{'deliveryFrequency':'Six_Hours'}})
 
         #start config recorder
         my_config.start_configuration_recorder(ConfigurationRecorderName='default')
         print('Config Service is ON')
+
+        print('Config setup complete.')
 
         #create code bucket
         code_bucket_name = code_bucket_prefix + account_id
@@ -125,6 +155,7 @@ class rdk():
         for bucket in response['Buckets']:
             if bucket['Name'] == code_bucket_name:
                 bucket_exists = True
+                print ("Found code bucket: " + code_bucket_name)
 
         if not bucket_exists:
             print('Creating Code bucket '+code_bucket_name )
@@ -135,7 +166,6 @@ class rdk():
                 }
             )
 
-        #make sure lambda execution role exists - TODO
         return 0
 
     #TODO: roll-back directory creation on failure.
