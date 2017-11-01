@@ -133,6 +133,7 @@ Authors
 * **Greg Kim and Chris Gutierrez** - *Initial work and CI definitions*
 * **Michael Borchert** - *Python version*
 * **Henry Huang** - *CFN templates and other code*
+* **Jonathan Rault** - *Design, testing, feedback*
 
 See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
 
