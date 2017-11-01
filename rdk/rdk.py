@@ -57,7 +57,7 @@ class rdk():
 
 
         #create custom session based on whatever credentials are available to us
-        my_session = self.get_boto_session()
+        my_session = self.__get_boto_session()
 
         #Create our ConfigService client
         my_config = my_session.client('config')
@@ -68,7 +68,7 @@ class rdk():
         account_id = response['Account']
 
         config_recorder_exists = False
-        config_recorder_name = ""
+        config_recorder_name = "default"
         config_role_arn = ""
         delivery_channel_exists = False
         config_bucket_exists = False
@@ -80,7 +80,7 @@ class rdk():
             config_recorder_exists = True
             config_recorder_name = recorders['ConfigurationRecorders'][0]['name']
             config_role_arn = recorders['ConfigurationRecorders'][0]['roleARN']
-            print("Found Config Recorder.")
+            print("Found Config Recorder: " + config_recorder_name)
             print("Found Config Role: " + config_role_arn)
 
         delivery_channels = my_config.describe_delivery_channels()
@@ -136,14 +136,14 @@ class rdk():
         if not config_role_arn:
             config_role_arn = "arn:aws:iam::"+account_id+":role/config-role"
 
-        my_config.put_configuration_recorder(ConfigurationRecorder={'name':'default', 'roleARN':config_role_arn, 'recordingGroup':{'allSupported':True, 'includeGlobalResourceTypes': True}})
+        my_config.put_configuration_recorder(ConfigurationRecorder={'name':config_recorder_name, 'roleARN':config_role_arn, 'recordingGroup':{'allSupported':True, 'includeGlobalResourceTypes': True}})
 
         if not delivery_channel_exists:
             #create delivery channel
             my_config.put_delivery_channel(DeliveryChannel={'name':'default', 's3BucketName':config_bucket_name, 'configSnapshotDeliveryProperties':{'deliveryFrequency':'Six_Hours'}})
 
         #start config recorder
-        my_config.start_configuration_recorder(ConfigurationRecorderName='default')
+        my_config.start_configuration_recorder(ConfigurationRecorderName=config_recorder_name)
         print('Config Service is ON')
 
         print('Config setup complete.')
@@ -173,7 +173,7 @@ class rdk():
         print ("Running create!")
 
         #Parse the command-line arguments relevant for creating a Config Rule.
-        self._parse_rule_args(True)
+        self.__parse_rule_args(True)
 
         if not self.args.runtime:
             print("Runtime is required for 'create' command.")
@@ -197,7 +197,7 @@ class rdk():
         shutil.copyfile(src, dst)
 
         #Write the parameters to a file in the rule directory.
-        self._write_params_file()
+        self.__write_params_file()
 
         print ("Local Rule files created.")
         return 0
@@ -206,10 +206,10 @@ class rdk():
         print("Running modify!")
 
         #Parse the command-line arguments necessary for modifying a Config Rule.
-        self._parse_rule_args(False)
+        self.__parse_rule_args(False)
 
         #Get existing parameters
-        old_params = self._read_params_file()
+        old_params = self.__read_params_file()
 
         if not self.args.runtime and old_params['Parameters']['SourceRuntime']:
             self.args.runtime = old_params['Parameters']['SourceRuntime']
@@ -224,7 +224,7 @@ class rdk():
             self.args.input_parameters = old_params['Parameters']['InputParameters']
 
         #Write the parameters to a file in the rule directory.
-        self._write_params_file()
+        self.__write_params_file()
 
         print ("Modified Rule '"+self.args.rulename+"'")
 
@@ -237,10 +237,10 @@ class rdk():
         parser.add_argument('--all','-a', action='store_true', help="All rules in the working directory will be deployed.")
         self.args = parser.parse_args(self.args.command_args, self.args)
 
-        rule_names = self.get_rule_list_for_command()
+        rule_names = self.__get_rule_list_for_command()
 
         #create custom session based on whatever credentials are available to us
-        my_session = self.get_boto_session()
+        my_session = self.__get_boto_session()
 
         #get accountID
         my_sts = my_session.client('sts')
@@ -260,7 +260,7 @@ class rdk():
 
             #create CFN Parameters
             #read rest of params from file in rule directory
-            my_rule_params = self._get_rule_parameters(rule_name)
+            my_rule_params = self.__get_rule_parameters(rule_name)
 
             my_params = [
                 {
@@ -317,7 +317,7 @@ class rdk():
                     else:
                         raise
 
-                my_lambda_arn = self._get_lambda_arn_for_rule(rule_name)
+                my_lambda_arn = self.__get_lambda_arn_for_rule(rule_name)
 
                 print("Publishing Lambda code...")
                 my_lambda_client = my_session.client('lambda')
@@ -341,7 +341,7 @@ class rdk():
                 )
 
             #wait for changes to propagate. TODO: detect and report failures
-            self._wait_for_cfn_stack(my_cfn, rule_name)
+            self.__wait_for_cfn_stack(my_cfn, rule_name)
 
         print('Config deploy complete.')
 
@@ -349,14 +349,14 @@ class rdk():
 
     def test_local(self):
         print ("Running test_local!")
-        self._parse_test_args()
+        self.__parse_test_args()
 
         #Dynamically import the shared rule_util module.
         util_path = os.path.join(rdk_dir, "rule_util.py")
         imp.load_source('rule_util', util_path)
 
         #Construct our list of rules to test.
-        rule_names = self.get_rule_list_for_command()
+        rule_names = self.__get_rule_list_for_command()
 
         for rule_name in rule_names:
             print("Testing "+rule_name)
@@ -366,11 +366,11 @@ class rdk():
             module = imp.load_source(module_name, module_path)
 
             #Get CI JSON from either the CLI or one of the stored templates.
-            my_cis = self._get_test_CIs(rule_name)
+            my_cis = self.__get_test_CIs(rule_name)
 
             #Get Parameters from Rule config
             #TODO: Need better error outputs to make it clear that issues are in the lambda code, not the RDK.
-            my_rule_params = self._get_rule_parameters(rule_name)
+            my_rule_params = self.__get_rule_parameters(rule_name)
             my_parameters = my_rule_params['InputParameters']
 
             #Execute the evaluate_compliance function
@@ -385,20 +385,20 @@ class rdk():
 
     def test_remote(self):
         print ("Running test_remote!")
-        self._parse_test_args()
+        self.__parse_test_args()
 
         #Construct our list of rules to test.
-        rule_names = self.get_rule_list_for_command()
+        rule_names = self.__get_rule_list_for_command()
 
         #Create our Lambda client.
-        my_session = self.get_boto_session()
+        my_session = self.__get_boto_session()
         my_lambda_client = my_session.client('lambda')
 
         for rule_name in rule_names:
             print("Testing "+rule_name)
 
             #Get CI JSON from either the CLI or one of the stored templates.
-            my_cis = self._get_test_CIs(rule_name)
+            my_cis = self.__get_test_CIs(rule_name)
 
             my_parameters = {}
             if self.args.test_parameters:
@@ -417,7 +417,7 @@ class rdk():
                 test_event['ruleParameters'] = json.dumps(my_parameters)
 
                 #Get the Lambda function associated with the Rule
-                my_lambda_arn = self._get_lambda_arn_for_rule(rule_name)
+                my_lambda_arn = self.__get_lambda_arn_for_rule(rule_name)
 
                 #Call Lambda function with test event.
                 result = my_lambda_client.invoke(
@@ -448,7 +448,7 @@ class rdk():
         my_test_ci = TestCI(self.args.ci_type)
         print(json.dumps(my_test_ci.get_json(), indent=4))
 
-    def get_boto_session(self):
+    def __get_boto_session(self):
         session_args = {}
 
         if self.args.region:
@@ -462,7 +462,7 @@ class rdk():
 
         return boto3.session.Session(**session_args)
 
-    def get_rule_list_for_command(self):
+    def __get_rule_list_for_command(self):
         rule_names = []
         if self.args.all:
             d = '.'
@@ -476,14 +476,14 @@ class rdk():
 
         return rule_names
 
-    def _get_rule_parameters(self, rule_name):
+    def __get_rule_parameters(self, rule_name):
         params_file_path = os.path.join(os.getcwdu(), rules_dir, rule_name, parameter_file_name)
         parameters_file = open(params_file_path, 'r')
         my_json = json.load(parameters_file)
         parameters_file.close()
         return my_json['Parameters']
 
-    def _parse_rule_args(self, is_required):
+    def __parse_rule_args(self, is_required):
         parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
         parser.add_argument('--runtime','-R', required=is_required, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
         parser.add_argument('--maximum-frequency','-m', help='Maximum execution frequency', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
@@ -492,7 +492,7 @@ class rdk():
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         self.args = parser.parse_args(self.args.command_args, self.args)
 
-    def _parse_test_args(self):
+    def __parse_test_args(self):
         parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
         parser.add_argument('rulename', metavar='<rulename>[,<rulename>,...]', nargs='*', help='Rule name(s) to test')
         parser.add_argument('--all','-a', action='store_true', help="Test will be run against all rules in the working directory.")
@@ -505,9 +505,9 @@ class rdk():
             print("You may specify either specific rules or --all, but not both.")
             return 1
 
-    def _write_params_file(self):
+    def __write_params_file(self):
         #create custom session based on whatever credentials are available to us
-        my_session = self.get_boto_session()
+        my_session = self.__get_boto_session()
 
         #get accountID
         my_sts = my_session.client('sts')
@@ -544,7 +544,7 @@ class rdk():
         json.dump(my_params, parameters_file, indent=2)
         parameters_file.close()
 
-    def _read_params_file(self):
+    def __read_params_file(self):
         my_params = {}
         params_file_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, parameter_file_name)
         parameters_file = open(params_file_path, 'r')
@@ -552,7 +552,7 @@ class rdk():
         parameters_file.close()
         return my_params
 
-    def _wait_for_cfn_stack(self, cfn_client, stackname):
+    def __wait_for_cfn_stack(self, cfn_client, stackname):
         in_progress = True
         while in_progress:
             my_stack = cfn_client.describe_stacks(StackName=stackname)
@@ -563,7 +563,7 @@ class rdk():
                 print("Waiting for CloudFormation stack operation to complete...")
                 time.sleep(5)
 
-    def _get_test_CIs(self, rulename):
+    def __get_test_CIs(self, rulename):
         test_ci_list = []
         if self.args.test_ci_json:
             print ("Testing with supplied CI JSON - NOT YET IMPLEMENTED") #TODO
@@ -590,7 +590,7 @@ class rdk():
             #    test_ci_list self._load_cis_from_file(tests_path)
             else:
                 print("\tTesting with generic CI for configured Resource Type(s)")
-                my_rule_params = self._get_rule_parameters(rulename)
+                my_rule_params = self.__get_rule_parameters(rulename)
                 ci_types = str(my_rule_params['SourceEvents']).split(",")
                 for ci_type in ci_types:
                     my_test_ci = TestCI(ci_type)
@@ -598,14 +598,14 @@ class rdk():
 
         return test_ci_list
 
-    def _get_lambda_arn_for_rule(self, rulename):
+    def __get_lambda_arn_for_rule(self, rulename):
         #create custom session based on whatever credentials are available to us
-        my_session = self.get_boto_session()
+        my_session = self.__get_boto_session()
 
         my_cfn = my_session.client('cloudformation')
 
         #Since CFN won't detect changes to the lambda code stored in S3 as a reason to update the stack, we need to manually update the code reference in Lambda once the CFN has run.
-        self._wait_for_cfn_stack(my_cfn, rulename)
+        self.__wait_for_cfn_stack(my_cfn, rulename)
 
         #Lamba function is an output of the stack.
         my_updated_stack = my_cfn.describe_stacks(StackName=rulename)
