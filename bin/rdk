@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument('--region','-r', help='Select the region to run against.')
     parser.add_argument('--verbose','-v', action='count')
     #Removed for now from command choices: 'test-remote', 'status'
-    parser.add_argument('command', metavar='<command>', help='Command to run.', choices=['init', 'create', 'modify', 'deploy', 'test-local', 'sample-ci'])
+    parser.add_argument('command', metavar='<command>', help='Command to run.', choices=['init', 'create', 'modify', 'deploy', 'test-local', 'sample-ci', 'logs'])
     parser.add_argument('command_args', metavar='<command arguments>', nargs=argparse.REMAINDER)
 
     args = parser.parse_args()

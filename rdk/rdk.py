@@ -39,11 +39,6 @@ class rdk():
         return(exit_code)
 
     def init(self):
-        #parser = argparse.ArgumentParser()
-        #parser.add_argument("--config-bucket", "-c", help='Bucket to )
-        #self.args = parser.parse_args(self.args.command_args, self.args)
-
-        #run the init code
         print ("Running init!")
 
         #if the .rdk directory exists, delete it.
@@ -88,11 +83,13 @@ class rdk():
             delivery_channel_exists = True
             config_bucket_name = delivery_channels['DeliveryChannels'][0]['s3BucketName']
             print("Found Bucket: " + config_bucket_name)
+            config_bucket_exists = True
+
+        my_s3 = my_session.client('s3')
 
         if not config_bucket_exists:
             #create config bucket
             config_bucket_name = config_bucket_prefix + account_id
-            my_s3 = my_session.client('s3')
             response = my_s3.list_buckets()
             bucket_exists = False
             for bucket in response['Buckets']:
@@ -149,7 +146,7 @@ class rdk():
         print('Config setup complete.')
 
         #create code bucket
-        code_bucket_name = code_bucket_prefix + account_id
+        code_bucket_name = code_bucket_prefix + account_id + my_session.region_name
         response = my_s3.list_buckets()
         bucket_exists = False
         for bucket in response['Buckets']:
@@ -252,7 +249,7 @@ class rdk():
             s3_src_dir = os.path.join(os.getcwdu(), rules_dir, rule_name)
             s3_dst = os.path.join(rule_name, rule_name+".zip")
             s3_src = shutil.make_archive(os.path.join(rule_name, rule_name), 'zip', s3_src_dir)
-            code_bucket_name = code_bucket_prefix + account_id
+            code_bucket_name = code_bucket_prefix + account_id + my_session.region_name
             my_s3 = my_session.resource('s3')
 
             print ("Uploading " + rule_name)
@@ -447,6 +444,77 @@ class rdk():
 
         my_test_ci = TestCI(self.args.ci_type)
         print(json.dumps(my_test_ci.get_json(), indent=4))
+
+    #TODO: currently doesn't handle very large log volumes.
+    def logs(self):
+        parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
+        parser.add_argument('rulename', metavar='<rulename>', help='Rule whose logs will be displayed')
+        parser.add_argument('--follow', '-f', action='store_true', help='Continuously poll Lambda logs and write to stdout.')
+        parser.add_argument('--number', '-n', default=1, help='Number of previous logged events to display.')
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
+        my_session = self.__get_boto_session()
+        cw_logs = my_session.client('logs')
+        log_group_name = self.__get_log_group_name()
+        print(log_group_name)
+
+        #Retrieve the last number of log events as specified by the user.
+        try:
+            log_streams = cw_logs.describe_log_streams(
+                logGroupName = log_group_name,
+                orderBy = 'LastEventTime',
+                limit = int(self.args.number) #This is probably overkill, but this is the worst-case scenario if there is only one event per stream
+            )
+
+            #Sadly we can't just use filter_log_events, since we don't know the timestamps yet.
+            my_events = self.__get_log_events(cw_logs, log_streams, int(self.args.number))
+
+            print (my_events)
+
+            latest_timestamp = 0
+            for event in my_events:
+                if event['timestamp'] > latest_timestamp:
+                    latest_timestamp = event['timestamp']
+
+                print(json.dumps(event, indent=2))
+            if self.args.follow:
+                while True:
+                    #Wait 2 seconds
+                    time.sleep(2)
+
+                    #Get all events between now and the timestamp of the most recent event.
+                    #my_new_events =
+
+                    #Get the timestamp on the most recent event.
+
+        except cw_logs.exceptions.ResourceNotFoundException as e:
+            print(e.response['Error']['Message'])
+
+
+    def __get_log_events(self, my_client, log_streams, number_of_events):
+        event_count = 0
+        log_events = []
+        for stream in log_streams['logStreams']:
+            #Retrieve the logs for this stream.
+            events = my_client.get_log_events(
+                logGroupName = self.__get_log_group_name(),
+                logStreamName = stream['logStreamName'],
+                limit = int(number_of_events)
+            )
+
+            #Go through the logs and add events to my output array.
+
+            for event in events['events']:
+                log_events.append(event)
+                event_count = event_count + 1
+
+                #Once I have enough events, stop.
+                if event_count >= number_of_events:
+                    return log_events
+
+    def __get_log_group_name(self):
+        func = lambda s: s[:1].lower() + s[1:] if s else ''
+        return '/aws/lambda/' + func(self.args.rulename)
 
     def __get_boto_session(self):
         session_args = {}
