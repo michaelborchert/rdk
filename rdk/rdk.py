@@ -1,4 +1,3 @@
-#
 #    Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
@@ -473,38 +472,68 @@ class rdk():
             log_streams = cw_logs.describe_log_streams(
                 logGroupName = log_group_name,
                 orderBy = 'LastEventTime',
+                descending = True,
                 limit = int(self.args.number) #This is probably overkill, but this is the worst-case scenario if there is only one event per stream
             )
 
-            #Sadly we can't just use filter_log_events, since we don't know the timestamps yet.
+            #Sadly we can't just use filter_log_events, since we don't know the timestamps yet and filter_log_events doesn't appear to support ordering.
             my_events = self.__get_log_events(cw_logs, log_streams, int(self.args.number))
-
-            #print (my_events)
 
             latest_timestamp = 0
             for event in my_events:
                 if event['timestamp'] > latest_timestamp:
                     latest_timestamp = event['timestamp']
 
-                time_string = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event['timestamp']/1000))
-                message_string = str(event['message']).rstrip().replace('\n','\n                      ')
+                self.__print_log_event(event)
 
-                rows, columns = os.popen('stty size', 'r').read().split()
-                line_wrap = int(columns) - 22
-
-                print(time_string + " - " + message_string)
             if self.args.follow:
-                while True:
-                    #Wait 2 seconds
-                    time.sleep(2)
+                try:
+                    while True:
+                        #Wait 2 seconds
+                        time.sleep(2)
+                        #print(latest_timestamp)
+                        #print(int(time.time())*1000)
 
-                    #Get all events between now and the timestamp of the most recent event.
-                    #my_new_events =
+                        #Get all events between now and the timestamp of the most recent event.
+                        my_new_events = cw_logs.filter_log_events(
+                            logGroupName = log_group_name,
+                            startTime = latest_timestamp+1,
+                            endTime = int(time.time())*1000,
+                            interleaved = True)
 
-                    #Get the timestamp on the most recent event.
+
+                        for event in my_new_events['events']:
+                            #print(event)
+                            if 'timestamp' in event:
+                                #Get the timestamp on the most recent event.
+                                if event['timestamp'] > latest_timestamp:
+                                    latest_timestamp = event['timestamp']
+
+                                #Print the event.
+                                self.__print_log_event(event)
+                except KeyboardInterrupt as k:
+                    sys.exit(0)
 
         except cw_logs.exceptions.ResourceNotFoundException as e:
             print(e.response['Error']['Message'])
+
+    def __print_log_event(self, event):
+        time_string = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event['timestamp']/1000))
+
+        rows, columns = os.popen('stty size', 'r').read().split()
+        line_wrap = int(columns) - 22
+        message_lines = str(event['message']).splitlines()
+        formatted_lines = []
+
+        for line in message_lines:
+            line = line.replace('\t','    ')
+            formatted_lines.append('\n'.join(line[i:i+line_wrap] for i in range(0, len(line), line_wrap)))
+
+        message_string = '\n'.join(formatted_lines)
+        message_string = message_string.replace('\n','\n                      ')
+        #message_string = str(event['message']).rstrip().replace('\n','\n                      ')
+
+        print(time_string + " - " + message_string)
 
     def __get_log_events(self, my_client, log_streams, number_of_events):
         event_count = 0
@@ -528,7 +557,6 @@ class rdk():
                     return log_events
 
     def __get_log_group_name(self):
-        func = lambda s: s[:1].lower() + s[1:] if s else ''
         return '/aws/lambda/RDK-Rule-Function-' + self.args.rulename
 
     def __get_boto_session(self):
