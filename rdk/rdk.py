@@ -1,3 +1,12 @@
+#
+#    Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
+#
+#        http://aws.amazon.com/apache2.0/
+#
+#    or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
 import os
 from os import path
 import sys
@@ -11,6 +20,7 @@ from botocore.exceptions import ClientError
 from datetime import datetime
 import base64
 import ast
+import textwrap
 
 rdk_dir = '.rdk'
 rules_dir = ''
@@ -456,7 +466,7 @@ class rdk():
         my_session = self.__get_boto_session()
         cw_logs = my_session.client('logs')
         log_group_name = self.__get_log_group_name()
-        print(log_group_name)
+        #print(log_group_name)
 
         #Retrieve the last number of log events as specified by the user.
         try:
@@ -469,14 +479,20 @@ class rdk():
             #Sadly we can't just use filter_log_events, since we don't know the timestamps yet.
             my_events = self.__get_log_events(cw_logs, log_streams, int(self.args.number))
 
-            print (my_events)
+            #print (my_events)
 
             latest_timestamp = 0
             for event in my_events:
                 if event['timestamp'] > latest_timestamp:
                     latest_timestamp = event['timestamp']
 
-                print(json.dumps(event, indent=2))
+                time_string = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event['timestamp']/1000))
+                message_string = str(event['message']).rstrip().replace('\n','\n                      ')
+
+                rows, columns = os.popen('stty size', 'r').read().split()
+                line_wrap = int(columns) - 22
+
+                print(time_string + " - " + message_string)
             if self.args.follow:
                 while True:
                     #Wait 2 seconds
@@ -489,7 +505,6 @@ class rdk():
 
         except cw_logs.exceptions.ResourceNotFoundException as e:
             print(e.response['Error']['Message'])
-
 
     def __get_log_events(self, my_client, log_streams, number_of_events):
         event_count = 0
@@ -514,7 +529,7 @@ class rdk():
 
     def __get_log_group_name(self):
         func = lambda s: s[:1].lower() + s[1:] if s else ''
-        return '/aws/lambda/' + func(self.args.rulename)
+        return '/aws/lambda/RDK-Rule-Function-' + self.args.rulename
 
     def __get_boto_session(self):
         session_args = {}

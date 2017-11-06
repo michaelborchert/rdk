@@ -42,6 +42,7 @@
     "rdkRuleCodeLambda": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
+        "FunctionName": { "Fn::Sub": "RDK-Rule-Function-${AWS::StackName}"},
         "Code": {
           "S3Bucket": { "Ref": "SourceBucket" },
           "S3Key": { "Fn::Sub": "${AWS::StackName}/${AWS::StackName}.zip" }
