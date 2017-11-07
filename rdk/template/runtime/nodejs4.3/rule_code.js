@@ -43,4 +43,3 @@ function rule_handler(event, context, callback) {
 exports.lambda_handler = (event, context, callback) => {
     rule_util.decorate_handler(rule_handler)(event, context, callback);
 }
-

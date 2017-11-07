@@ -196,7 +196,7 @@ class rdk():
 
         #copy rule.py template into rule directory
         src = os.path.join(os.getcwd(), rdk_dir, rule_handler)
-        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename+".py")
+        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename+'.py')
         shutil.copyfile(src, dst)
 
         src = os.path.join(os.getcwd(), rdk_dir, util_filename)
