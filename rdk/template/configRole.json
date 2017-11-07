@@ -36,6 +36,10 @@
       "Description": "Input Parameters",
       "Type": "String",
       "Default": "{}"
+    },
+    "SourceHandler":{
+        "Description": "Lambda Function Handler",
+        "Type": "String"
     }
   },
   "Resources": {
@@ -48,7 +52,7 @@
           "S3Key": { "Fn::Sub": "${AWS::StackName}/${AWS::StackName}.zip" }
         },
         "Description": "Create a new AWS lambda function for rule code",
-        "Handler": { "Fn::Sub": "${AWS::StackName}.lambda_handler"},
+        "Handler": { "Ref": "SourceHandler"},
         "MemorySize": "128",
         "Role":  { "Fn::GetAtt": [ "rdkConfigRuleRole", "Arn" ] } ,
         "Runtime": { "Ref": "SourceRuntime"},

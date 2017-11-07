@@ -19,13 +19,13 @@ from botocore.exceptions import ClientError
 from datetime import datetime
 import base64
 import ast
-import textwrap
+import glob
 
 rdk_dir = '.rdk'
 rules_dir = ''
 tests_dir = ''
-util_filename = 'rule_util.py'
-rule_handler = 'rule_code.py'
+#util_filename = 'rule_util.py'
+#rule_handler = 'rule_code.py'
 rule_template = 'rdk-rule.template'
 config_bucket_prefix = 'config-bucket-'
 config_role_name = 'config-role'
@@ -181,9 +181,14 @@ class rdk():
         #Parse the command-line arguments relevant for creating a Config Rule.
         self.__parse_rule_args(True)
 
+        runtime_extension_lookup = {'nodejs4.3':'js', 'python2.7':'py','python3.6':'py','nodejs6.10':'js','java8':'java'}
+
         if not self.args.runtime:
             print("Runtime is required for 'create' command.")
             return 1
+
+        if self.args.runtime not in runtime_extension_lookup:
+            print("Sorry, that runtime is not supported yet!")
 
         #create rule directory.
         rule_path = os.path.join(os.getcwdu(), rules_dir, self.args.rulename)
@@ -193,14 +198,19 @@ class rdk():
 
         os.makedirs(os.path.join(os.getcwdu(), rules_dir, self.args.rulename))
 
-        #copy rule.py template into rule directory
-        src = os.path.join(os.getcwdu(), rdk_dir, rule_handler)
-        dst = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, self.args.rulename+".py")
-        shutil.copyfile(src, dst)
+        #copy rule template into rule directory
+        src = os.path.join(os.getcwdu(), rdk_dir, 'runtime', self.args.runtime, 'rule_code.'+runtime_extension_lookup[self.args.runtime])
+        dst = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, self.args.rulename+'.'+runtime_extension_lookup[self.args.runtime])
+        shutil.copyfile(src,dst)
 
-        src = os.path.join(os.getcwdu(), rdk_dir, util_filename)
-        dst = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, util_filename)
-        shutil.copyfile(src, dst)
+        #copy util template into rule directory
+        src = os.path.join(os.getcwdu(), rdk_dir, 'runtime', self.args.runtime, 'rule_util.'+runtime_extension_lookup[self.args.runtime])
+        dst = os.path.join(os.getcwdu(), rules_dir, self.args.rulename, 'rule_util.'+runtime_extension_lookup[self.args.runtime])
+        try:
+            shutil.copyfile(src,dst)
+        except Exception as e:
+            #Swallow it for now, since it's almost certainly just a runtime that doesn't have a util file.
+            print("No util file to copy.")
 
         #Write the parameters to a file in the rule directory.
         self.__write_params_file()
@@ -268,30 +278,36 @@ class rdk():
             #read rest of params from file in rule directory
             my_rule_params = self.__get_rule_parameters(rule_name)
 
+            handler = self.__get_handler_name(rule_name, my_rule_params)
+
             my_params = [
                 {
                     'ParameterKey': 'SourceBucket',
-                    'ParameterValue': code_bucket_name,
+                    'ParameterValue': code_bucket_name
                 },
                 {
                     'ParameterKey': 'SourcePath',
-                    'ParameterValue': s3_dst,
+                    'ParameterValue': s3_dst
                 },
                 {
                     'ParameterKey': 'SourceRuntime',
-                    'ParameterValue': my_rule_params['SourceRuntime'],
+                    'ParameterValue': my_rule_params['SourceRuntime']
                 },
                 {
                     'ParameterKey': 'SourceEvents',
-                    'ParameterValue': my_rule_params['SourceEvents'],
+                    'ParameterValue': my_rule_params['SourceEvents']
                 },
                 {
                     'ParameterKey': 'SourcePeriodic',
-                    'ParameterValue': my_rule_params['SourcePeriodic'],
+                    'ParameterValue': my_rule_params['SourcePeriodic']
                 },
                 {
                     'ParameterKey': 'SourceInputParameters',
-                    'ParameterValue': my_rule_params['InputParameters'],
+                    'ParameterValue': my_rule_params['InputParameters']
+                },
+                {
+                    'ParameterKey': 'SourceHandler',
+                    'ParameterValue': handler
                 }]
 
             #deploy config rule TODO: better detection of existing rules and update/create decision logic
@@ -576,11 +592,11 @@ class rdk():
     def __get_rule_list_for_command(self):
         rule_names = []
         if self.args.all:
-            d = '.'
-            for obj_name in os.listdir('.'):
-                if os.path.isdir(os.path.join('.', obj_name)) and not obj_name == 'rdk':
-                    code_file = obj_name + ".py"
-                    if code_file in os.listdir(obj_name):
+            d = os.getcwdu()
+            print d
+            for obj_name in os.listdir(d):
+                if os.path.isdir(os.path.join(d, obj_name)) and not obj_name == 'rdk':
+                    if glob.glob(os.path.join(d, obj_name, obj_name+".*")):
                         rule_names.append(obj_name)
         else:
             rule_names.append(self.args.rulename[0])
@@ -673,6 +689,13 @@ class rdk():
             else:
                 print("Waiting for CloudFormation stack operation to complete...")
                 time.sleep(5)
+
+    def __get_handler_name(self, rule_name, params):
+        if params['SourceRuntime'] in ['python2.7','python3.6','nodejs4.3','nodejs6.10']:
+            return rule_name+".lambda_handler"
+        elif params['SourceRuntime'] in ['java8']:
+                return "com.rdk.CustomConfigHandler"
+
 
     def __get_test_CIs(self, rulename):
         test_ci_list = []
