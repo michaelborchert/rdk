@@ -80,7 +80,8 @@ class rdk():
 
         #Check to see if the ConfigRecorder has been created.
         recorders = my_config.describe_configuration_recorders()
-        if recorders:
+        if len(recorders['ConfigurationRecorders']) > 0:
+            print(recorders)
             config_recorder_exists = True
             config_recorder_name = recorders['ConfigurationRecorders'][0]['name']
             config_role_arn = recorders['ConfigurationRecorders'][0]['roleARN']
@@ -88,7 +89,7 @@ class rdk():
             print("Found Config Role: " + config_role_arn)
 
         delivery_channels = my_config.describe_delivery_channels()
-        if delivery_channels:
+        if len(delivery_channels['DeliveryChannels']) > 0:
             delivery_channel_exists = True
             config_bucket_name = delivery_channels['DeliveryChannels'][0]['s3BucketName']
             print("Found Bucket: " + config_bucket_name)
