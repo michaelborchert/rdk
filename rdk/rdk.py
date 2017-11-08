@@ -59,7 +59,6 @@ class rdk():
         dst = rdk_dir
         shutil.copytree(src, dst)
 
-
         #create custom session based on whatever credentials are available to us
         my_session = self.__get_boto_session()
 
@@ -81,7 +80,7 @@ class rdk():
         #Check to see if the ConfigRecorder has been created.
         recorders = my_config.describe_configuration_recorders()
         if len(recorders['ConfigurationRecorders']) > 0:
-            print(recorders)
+            #print(recorders)
             config_recorder_exists = True
             config_recorder_name = recorders['ConfigurationRecorders'][0]['name']
             config_role_arn = recorders['ConfigurationRecorders'][0]['roleARN']
@@ -497,6 +496,11 @@ class rdk():
             my_events = self.__get_log_events(cw_logs, log_streams, int(self.args.number))
 
             latest_timestamp = 0
+
+            if (my_events is None):
+                print("No Events to display.")
+                return(0)
+
             for event in my_events:
                 if event['timestamp'] > latest_timestamp:
                     latest_timestamp = event['timestamp']
