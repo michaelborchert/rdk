@@ -186,32 +186,39 @@ class rdk():
             print("Runtime is required for 'create' command.")
             return 1
 
-        extension_mapping = {'java8':'.java', 'python2.7':'.py', 'python3.6':'.py','nodejs4.3':'.js','nodejs6.10':'.js'}
+        extension_mapping = {'java8':'.java', 'python2.7':'.py', 'python3.6':'.py','nodejs4.3':'.js'}
         if self.args.runtime not in extension_mapping:
             print ("rdk does nto support that runtime yet.")
 
         #create rule directory.
         rule_path = os.path.join(os.getcwd(), rules_dir, self.args.rulename)
         if os.path.exists(rule_path):
-            print("Rule already exists.")
+            print("Local Rule directory already exists.")
             return 1
 
-        os.makedirs(os.path.join(os.getcwd(), rules_dir, self.args.rulename))
+        try:
+            os.makedirs(os.path.join(os.getcwd(), rules_dir, self.args.rulename))
 
-        #copy rule template into rule directory
-        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, rule_handler + extension_mapping[self.args.runtime])
-        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename + extension_mapping[self.args.runtime])
-        shutil.copyfile(src, dst)
-
-        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, util_filename + extension_mapping[self.args.runtime])
-        if os.path.exists(src):
-            dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename + extension_mapping[self.args.runtime])
+            #copy rule template into rule directory
+            src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, rule_handler + extension_mapping[self.args.runtime])
+            dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename + extension_mapping[self.args.runtime])
             shutil.copyfile(src, dst)
 
-        #Write the parameters to a file in the rule directory.
-        self.__write_params_file()
+            src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, util_filename + extension_mapping[self.args.runtime])
+            if os.path.exists(src):
+                dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename + extension_mapping[self.args.runtime])
+                shutil.copyfile(src, dst)
 
-        print ("Local Rule files created.")
+            #Write the parameters to a file in the rule directory.
+            self.__write_params_file()
+
+            print ("Local Rule files created.")
+        except Exception as e:
+            print("Error during create: " + str(e))
+            print("Rolling back...")
+
+            shutil.rmtree(rule_path)
+
         return 0
 
     def modify(self):
