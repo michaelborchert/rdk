@@ -24,8 +24,8 @@ import textwrap
 rdk_dir = '.rdk'
 rules_dir = ''
 tests_dir = ''
-util_filename = 'rule_util.py'
-rule_handler = 'rule_code.py'
+util_filename = 'rule_util'
+rule_handler = 'rule_code'
 rule_template = 'rdk-rule.template'
 config_bucket_prefix = 'config-bucket-'
 config_role_name = 'config-role'
@@ -186,6 +186,10 @@ class rdk():
             print("Runtime is required for 'create' command.")
             return 1
 
+        extension_mapping = {'java8':'.java', 'python2.7':'.py', 'python3.6':'.py','nodejs4.3':'.js','nodejs6.10':'.js'}
+        if self.args.runtime not in extension_mapping:
+            print ("rdk does nto support that runtime yet.")
+
         #create rule directory.
         rule_path = os.path.join(os.getcwd(), rules_dir, self.args.rulename)
         if os.path.exists(rule_path):
@@ -194,14 +198,15 @@ class rdk():
 
         os.makedirs(os.path.join(os.getcwd(), rules_dir, self.args.rulename))
 
-        #copy rule.py template into rule directory
-        src = os.path.join(os.getcwd(), rdk_dir, rule_handler)
-        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename+'.py')
+        #copy rule template into rule directory
+        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, rule_handler + extension_mapping[self.args.runtime])
+        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename + extension_mapping[self.args.runtime])
         shutil.copyfile(src, dst)
 
-        src = os.path.join(os.getcwd(), rdk_dir, util_filename)
-        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename)
-        shutil.copyfile(src, dst)
+        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, util_filename + extension_mapping[self.args.runtime])
+        if os.path.exists(src):
+            dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename + extension_mapping[self.args.runtime])
+            shutil.copyfile(src, dst)
 
         #Write the parameters to a file in the rule directory.
         self.__write_params_file()
@@ -293,6 +298,10 @@ class rdk():
                 {
                     'ParameterKey': 'SourceInputParameters',
                     'ParameterValue': my_rule_params['InputParameters'],
+                },
+                {
+                    'ParameterKey': 'SourceHandler',
+                    'ParameterValue': self.__get_handler(rule_name, my_rule_params)
                 }]
 
             #deploy config rule TODO: better detection of existing rules and update/create decision logic
@@ -579,10 +588,11 @@ class rdk():
         if self.args.all:
             d = '.'
             for obj_name in os.listdir('.'):
-                if os.path.isdir(os.path.join('.', obj_name)) and not obj_name == 'rdk':
-                    code_file = obj_name + ".py"
-                    if code_file in os.listdir(obj_name):
-                        rule_names.append(obj_name)
+                obj_path = os.path.join('.', obj_name)
+                if os.path.isdir(obj_path) and not obj_name == 'rdk':
+                    for file_name in os.listdir(obj_path):
+                        if file_name.split('.')[0] == obj_name and obj_name not in rule_names:
+                            rule_names.append(obj_name)
         else:
             rule_names.append(self.args.rulename[0])
 
@@ -674,6 +684,12 @@ class rdk():
             else:
                 print("Waiting for CloudFormation stack operation to complete...")
                 time.sleep(5)
+
+    def __get_handler(self, rule_name, params):
+        if params['SourceRuntime'] in ['python2.7','python3.6','nodejs4.3','nodejs6.10']:
+            return (rule_name+'.lambda_handler')
+        elif params['SourceRuntime'] in ['java8']:
+            return ('com.rdk.CustomConfigHandler')
 
     def __get_test_CIs(self, rulename):
         test_ci_list = []

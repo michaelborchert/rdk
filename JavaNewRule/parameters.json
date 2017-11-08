@@ -1,10 +1,10 @@
 {
   "Parameters": {
-    "CodeKey": "JavaRule.zip", 
+    "CodeKey": "JavaNewRule.zip", 
     "SourceRuntime": "java8", 
     "CodeBucket": "config-rule-code-bucket-106215627829", 
     "SourcePeriodic": "One_Hour", 
-    "RuleName": "JavaRule", 
+    "RuleName": "JavaNewRule", 
     "SourceEvents": "AWS::EC2::Instance", 
     "InputParameters": "{}"
   }
