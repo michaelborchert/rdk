@@ -13,7 +13,11 @@ def readme():
         return f.read()
 
 setup(name='rdk',
+<<<<<<< HEAD
       version='0.2.14',
+=======
+      version='0.2.15',
+>>>>>>> Bumping pip vesion number
       description='Rule Development Kit CLI for AWS Config',
       long_description=readme(),
       url='https://github.com/michaelborchert/rdk',
