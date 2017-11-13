@@ -10,7 +10,7 @@ def evaluate_compliance(configuration_item, rule_parameters):
     ###############################
     # Add your custom logic here. #
     ###############################
-    
+
     return 'NOT_APPLICABLE'
 
 # USE AS IS
