@@ -189,6 +189,9 @@ class rdk():
         if self.args.runtime not in extension_mapping:
             print ("rdk does nto support that runtime yet.")
 
+        if not self.args.maximum_frequency:
+            self.args.maximum_frequency = "TwentyFour_Hours"
+        
         #create rule directory.
         rule_path = os.path.join(os.getcwd(), rules_dir, self.args.rulename)
         if os.path.exists(rule_path):
@@ -668,6 +671,7 @@ class rdk():
 
         if self.args.resource_types:
             parameters['SourceEvents'] = self.args.resource_types
+
         if self.args.maximum_frequency:
             parameters['SourcePeriodic'] = self.args.maximum_frequency
 
