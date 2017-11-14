@@ -491,7 +491,7 @@ class rdk():
             log_streams = cw_logs.describe_log_streams(
                 logGroupName = log_group_name,
                 orderBy = 'LastEventTime',
-                descending = True,
+                descending = False,
                 limit = int(self.args.number) #This is probably overkill, but this is the worst-case scenario if there is only one event per stream
             )
 
@@ -579,9 +579,10 @@ class rdk():
                 #Once I have enough events, stop.
                 if event_count >= number_of_events:
                     return log_events
-                
+
         #If more records were requested than exist, return as many as we found.
         return log_events
+
     def __get_log_group_name(self):
         return '/aws/lambda/RDK-Rule-Function-' + self.args.rulename
 
