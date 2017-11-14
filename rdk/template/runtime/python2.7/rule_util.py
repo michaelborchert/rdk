@@ -25,6 +25,11 @@ def is_oversized_changed_notification(messageType):
     check_defined(messageType, 'messageType')
     return messageType == 'OversizedConfigurationItemChangeNotification'
 
+# Check whether the message is a ScheduledNotification or not.
+def is_scheduled_notification(messageType):
+    check_defined(messageType, 'messageType')
+    return messageType == 'ScheduledNotification'
+
 # Get configurationItem using getResourceConfigHistory API. in case of OversizedConfigurationItemChangeNotification
 def get_configuration(resourceType, resourceId, configurationCaptureTime):
     result = aws_config.get_resource_config_history(
@@ -56,6 +61,8 @@ def get_configuration_item(invokingEvent):
     if is_oversized_changed_notification(invokingEvent['messageType']):
         configurationItemSummary = check_defined(invokingEvent['configurationItemSummary'], 'configurationItemSummary')
         return get_configuration(configurationItemSummary['resourceType'], configurationItemSummary['resourceId'], configurationItemSummary['configurationItemCaptureTime'])
+    elif is_scheduled_notification(invokingEvent['messageType']):
+        return None
     else:
         return check_defined(invokingEvent['configurationItem'], 'configurationItem')
 
@@ -77,6 +84,9 @@ def rule_handler(lambda_handler):
         if 'ruleParameters' in event:
             ruleParameters = json.loads(event['ruleParameters'])
         configurationItem = get_configuration_item(invokingEvent)
+        if configurationItem is None:
+            print("RDK utility class does not yet support Scheduled Notifications.")
+            return ("Not_Applicable")
         invokingEvent['configurationItem'] = configurationItem
         event['invokingEvent'] = json.dumps(invokingEvent)
         compliance = 'NOT_APPLICABLE'

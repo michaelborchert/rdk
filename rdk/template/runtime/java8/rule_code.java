@@ -93,8 +93,7 @@ public class CustomConfigHandler {
         JsonNode invokingEvent = new ObjectMapper().readTree(event.getInvokingEvent());
         JsonNode ruleParameters = new ObjectMapper().readTree(event.getRuleParameters());
 
-        if (isEventNotApplicable(invokingEvent, event.isEventLeftScope())
-                || !hasExpectedImageId(invokingEvent, ruleParameters))
+        if (isEventNotApplicable(invokingEvent, event.isEventLeftScope()))
         {
             return ComplianceType.NOT_APPLICABLE;
         }
@@ -118,29 +117,6 @@ public class CustomConfigHandler {
     private boolean isStatusNotApplicable(String status) {
         return RESOURCE_DELETED.equals(status) || RESOURCE_DELETED_NOT_RECORDED.equals(status)
                 || RESOURCE_NOT_RECORDED.equals(status);
-    }
-
-    private boolean isDesiredTenancy(JsonNode invokingEvent, JsonNode ruleParameters) {
-        String expectedTenancy = ruleParameters.path(TENANCY).textValue();
-        String actualTenancy = invokingEvent.path(CONFIGURATION_ITEM).path(CONFIGURATION).path(PLACEMENT).path(TENANCY)
-                .textValue();
-        return StringUtils.equalsIgnoreCase(expectedTenancy, actualTenancy);
-    }
-
-    private boolean hasExpectedImageId(JsonNode invokingEvent, JsonNode ruleParameters) throws JsonProcessingException,
-            IOException {
-        String expectedImageId = ruleParameters.path(IMAGE_ID).textValue();
-        String actualImageId = invokingEvent.path(CONFIGURATION_ITEM).path(CONFIGURATION).path(IMAGE_ID).textValue();
-        return StringUtils.isBlank(expectedImageId) ? true : StringUtils.equalsIgnoreCase(expectedImageId,
-                actualImageId);
-    }
-
-    private boolean isOnExpectedDedicatedHost(JsonNode invokingEvent, JsonNode ruleParameters)
-            throws JsonProcessingException, IOException {
-        String expectedHostId = ruleParameters.path(HOST_ID).textValue();
-        String actualHostId = invokingEvent.path(CONFIGURATION_ITEM).path(CONFIGURATION).path(PLACEMENT).path(HOST_ID)
-                .textValue();
-        return StringUtils.isBlank(expectedHostId) ? true : StringUtils.equalsIgnoreCase(expectedHostId, actualHostId);
     }
 
     // Sends the evaluation results to AWS Config.

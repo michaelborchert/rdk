@@ -19,6 +19,12 @@ function isOverSizedChangeNotification(messageType) {
     return messageType === 'OversizedConfigurationItemChangeNotification';
 }
 
+// Check whether the message is a ScheduledNotification or not
+function isScheduledNotification(messageType) {
+  checkDefined(messageType, 'messageType');
+  return messageType === 'ScheduledNotification'
+}
+
 // Get configurationItem using getResourceConfigHistory API.
 function getConfiguration(resourceType, resourceId, configurationCaptureTime, callback) {
     config.getResourceConfigHistory({ resourceType, resourceId, laterTime: new Date(configurationCaptureTime), limit: 1 }, (err, data) => {
@@ -58,6 +64,8 @@ function getConfigurationItem(invokingEvent, callback) {
             const configurationItem = convertApiConfiguration(apiConfigurationItem);
             callback(null, configurationItem);
         });
+    } else if (isScheduledNotification(invokingEvent.messageType)) {
+      callback(null, null)
     } else {
         checkDefined(invokingEvent.configurationItem, 'configurationItem');
         callback(null, invokingEvent.configurationItem);
@@ -83,6 +91,9 @@ exports.decorate_handler = (rule_handler) => {
         getConfigurationItem(invokingEvent, (err, configurationItem) => {
             if (err) {
                 callback(err);
+            }
+            if (!configurationItem){
+              callback("RDK utility class does not yet support Scheduled Notifications.")
             }
             let compliance = 'NOT_APPLICABLE';
             const putEvaluationsRequest = {};
