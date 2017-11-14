@@ -20,6 +20,10 @@ from datetime import datetime
 import base64
 import ast
 import textwrap
+import fileinput
+import subprocess
+from subprocess import call
+
 
 rdk_dir = '.rdk'
 rules_dir = ''
@@ -174,7 +178,6 @@ class rdk():
 
         return 0
 
-    #TODO: roll-back directory creation on failure.
     def create(self):
         print ("Running create!")
 
@@ -202,14 +205,19 @@ class rdk():
             os.makedirs(os.path.join(os.getcwd(), rules_dir, self.args.rulename))
 
             #copy rule template into rule directory
-            src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, rule_handler + extension_mapping[self.args.runtime])
-            dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename + extension_mapping[self.args.runtime])
-            shutil.copyfile(src, dst)
-
-            src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, util_filename + extension_mapping[self.args.runtime])
-            if os.path.exists(src):
-                dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename + extension_mapping[self.args.runtime])
+            if self.args.runtime == 'java8':
+                #So complicated.
+                self.__create_java_rule()
+            else:
+                src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, rule_handler + extension_mapping[self.args.runtime])
+                dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename + extension_mapping[self.args.runtime])
                 shutil.copyfile(src, dst)
+
+                src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, util_filename + extension_mapping[self.args.runtime])
+                if os.path.exists(src):
+                    dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename + extension_mapping[self.args.runtime])
+                    shutil.copyfile(src, dst)
+
 
             #Write the parameters to a file in the rule directory.
             self.__write_params_file()
@@ -220,7 +228,7 @@ class rdk():
             print("Rolling back...")
 
             shutil.rmtree(rule_path)
-
+            raise e
         return 0
 
     def modify(self):
@@ -268,11 +276,25 @@ class rdk():
         response = my_sts.get_caller_identity()
         account_id = response['Account']
         for rule_name in rule_names:
-            print ("Zipping " + rule_name)
-            #zip rule code files and upload to s3 bucket
-            s3_src_dir = os.path.join(os.getcwd(), rules_dir, rule_name)
+            my_rule_params = self.__get_rule_parameters(rule_name)
+            s3_src = ""
+
+            if my_rule_params['SourceRuntime'] == "java8":
+                #Do java build and package.
+                print ("Running Gradle Build for "+rule_name)
+                working_dir = os.path.join(os.getcwd(), rules_dir, rule_name)
+                command = ["gradle","build"]
+                subprocess.call( command, cwd=working_dir)
+
+                #set source as distribution zip
+                s3_src = os.path.join(os.getcwd(), rules_dir, rule_name, 'build', 'distributions', rule_name+".zip")
+            else:
+                print ("Zipping " + rule_name)
+                #zip rule code files and upload to s3 bucket
+                s3_src_dir = os.path.join(os.getcwd(), rules_dir, rule_name)
+                s3_src = shutil.make_archive(os.path.join(rule_name, rule_name), 'zip', s3_src_dir)
+
             s3_dst = os.path.join(rule_name, rule_name+".zip")
-            s3_src = shutil.make_archive(os.path.join(rule_name, rule_name), 'zip', s3_src_dir)
             code_bucket_name = code_bucket_prefix + account_id + my_session.region_name
             my_s3 = my_session.resource('s3')
 
@@ -280,9 +302,6 @@ class rdk():
             my_s3.meta.client.upload_file(s3_src, code_bucket_name, s3_dst)
 
             #create CFN Parameters
-            #read rest of params from file in rule directory
-            my_rule_params = self.__get_rule_parameters(rule_name)
-
             my_params = [
                 {
                     'ParameterKey': 'SourceBucket',
@@ -541,6 +560,19 @@ class rdk():
         except cw_logs.exceptions.ResourceNotFoundException as e:
             print(e.response['Error']['Message'])
 
+    def __create_java_rule(self):
+        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', 'java8','src')
+        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, 'src')
+        shutil.copytree(src, dst)
+
+        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', 'java8','jars')
+        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, 'jars')
+        shutil.copytree(src, dst)
+
+        src = os.path.join(os.getcwd(), rdk_dir, 'runtime', 'java8', 'build.gradle')
+        dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, 'build.gradle')
+        shutil.copyfile(src, dst)
+
     def __print_log_event(self, event):
         time_string = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event['timestamp']/1000))
 
@@ -707,7 +739,7 @@ class rdk():
         if params['SourceRuntime'] in ['python2.7','python3.6','nodejs4.3','nodejs6.10']:
             return (rule_name+'.lambda_handler')
         elif params['SourceRuntime'] in ['java8']:
-            return ('com.rdk.CustomConfigHandler')
+            return ('com.rdk.RuleUtil::handler')
 
     def __get_test_CIs(self, rulename):
         test_ci_list = []

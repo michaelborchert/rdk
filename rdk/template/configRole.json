@@ -53,7 +53,7 @@
         },
         "Description": "Create a new AWS lambda function for rule code",
         "Handler": { "Ref": "SourceHandler"},
-        "MemorySize": "128",
+        "MemorySize": "256",
         "Role":  { "Fn::GetAtt": [ "rdkConfigRuleRole", "Arn" ] } ,
         "Runtime": { "Ref": "SourceRuntime"},
         "Timeout": 60
