@@ -191,7 +191,7 @@ class rdk():
 
         if not self.args.maximum_frequency:
             self.args.maximum_frequency = "TwentyFour_Hours"
-        
+
         #create rule directory.
         rule_path = os.path.join(os.getcwd(), rules_dir, self.args.rulename)
         if os.path.exists(rule_path):
@@ -579,7 +579,9 @@ class rdk():
                 #Once I have enough events, stop.
                 if event_count >= number_of_events:
                     return log_events
-
+                
+        #If more records were requested than exist, return as many as we found.
+        return log_events
     def __get_log_group_name(self):
         return '/aws/lambda/RDK-Rule-Function-' + self.args.rulename
 
@@ -658,7 +660,7 @@ class rdk():
                 my_input_params = json.loads(self.args.input_parameters, strict=False)
             except Exception as e:
                 print("Error parsing input parameter JSON.  Make sure your JSON keys and values are enclosed in double quotes and your input-parameters string is enclosed in single quotes.")
-                sys.exit(1)
+                raise e
 
         #create config file and place in rule directory
         parameters = {
