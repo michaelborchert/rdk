@@ -22,12 +22,12 @@ public class RuleUtil {
 
     private static final String AWS_REGION_PROPERTY = "AWS_DEFAULT_REGION";
     private static final String MESSAGE_TYPE_PROPERTY = "messageType";
-    private static final String HOST_ID = "hostId";
-    private static final String PLACEMENT = "placement";
+    //private static final String HOST_ID = "hostId";
+    //private static final String PLACEMENT = "placement";
     private static final String CONFIGURATION = "configuration";
-    private static final String IMAGE_ID = "imageId";
+    //private static final String IMAGE_ID = "imageId";
     private static final String STATUS_PATH = "configurationItemStatus";
-    private static final String TENANCY = "tenancy";
+    //private static final String TENANCY = "tenancy";
     private static final String RESOURCE_DELETED = "ResourceDeleted";
     private static final String RESOURCE_DELETED_NOT_RECORDED = "ResourceDeletedNotRecorded";
     private static final String CAPTURE_TIME_PATH = "configurationItemCaptureTime";

@@ -237,6 +237,8 @@ class rdk():
         #Parse the command-line arguments necessary for modifying a Config Rule.
         self.__parse_rule_args(False)
 
+        self.args.rule_name = self.__clean_rule_name(self.args.rule_name)
+
         #Get existing parameters
         old_params = self.__read_params_file()
 
@@ -500,6 +502,8 @@ class rdk():
         parser.add_argument('--number', '-n', default=1, help='Number of previous logged events to display.')
         self.args = parser.parse_args(self.args.command_args, self.args)
 
+        self.args.rulename = self.__clean_rule_name(self.args.rulename)
+        print(self.args.rulename)
         my_session = self.__get_boto_session()
         cw_logs = my_session.client('logs')
         log_group_name = self.__get_log_group_name()
@@ -510,13 +514,13 @@ class rdk():
             log_streams = cw_logs.describe_log_streams(
                 logGroupName = log_group_name,
                 orderBy = 'LastEventTime',
-                descending = False,
+                descending = True,
                 limit = int(self.args.number) #This is probably overkill, but this is the worst-case scenario if there is only one event per stream
             )
 
             #Sadly we can't just use filter_log_events, since we don't know the timestamps yet and filter_log_events doesn't appear to support ordering.
             my_events = self.__get_log_events(cw_logs, log_streams, int(self.args.number))
-
+            my_events.reverse()
             latest_timestamp = 0
 
             if (my_events is None):
@@ -559,6 +563,14 @@ class rdk():
 
         except cw_logs.exceptions.ResourceNotFoundException as e:
             print(e.response['Error']['Message'])
+
+    def __clean_rule_name(self, rule_name):
+        output = rule_name
+        if output[-1:] == "/":
+            print("Removing trailing '/'")
+            output = output.rstrip('/')
+
+        return output
 
     def __create_java_rule(self):
         src = os.path.join(os.getcwd(), rdk_dir, 'runtime', 'java8','src')
@@ -643,7 +655,7 @@ class rdk():
                         if file_name.split('.')[0] == obj_name and obj_name not in rule_names:
                             rule_names.append(obj_name)
         else:
-            rule_names.append(self.args.rulename[0])
+            rule_names.append(self.__clean_rule_name(self.args.rulename[0]))
 
         return rule_names
 
