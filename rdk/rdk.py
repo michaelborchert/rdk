@@ -130,7 +130,7 @@ class rdk():
             if not role_exists:
                 print('Creating IAM role config-role')
                 assume_role_policy = open(os.path.join(rdk_dir, assume_role_policy_file), 'r').read()
-                my_iam.create_role(RoleName=config_role_name, AssumeRolePolicyDocument=assume_role_policy)
+                my_iam.create_role(RoleName=config_role_name, AssumeRolePolicyDocument=assume_role_policy, Path="/rdk/")
 
             #attach role policy
             my_iam.attach_role_policy(RoleName=config_role_name, PolicyArn='arn:aws:iam::aws:policy/service-role/AWSConfigRole')
@@ -144,7 +144,7 @@ class rdk():
 
         #create or update config recorder
         if not config_role_arn:
-            config_role_arn = "arn:aws:iam::"+account_id+":role/config-role"
+            config_role_arn = "arn:aws:iam::"+account_id+":role/rdk/config-role"
 
         my_config.put_configuration_recorder(ConfigurationRecorder={'name':config_recorder_name, 'roleARN':config_role_arn, 'recordingGroup':{'allSupported':True, 'includeGlobalResourceTypes': True}})
 
@@ -228,6 +228,7 @@ class rdk():
             print("Rolling back...")
 
             shutil.rmtree(rule_path)
+
             raise e
         return 0
 
@@ -257,7 +258,7 @@ class rdk():
         #Write the parameters to a file in the rule directory.
         self.__write_params_file()
 
-        print ("Modified Rule '"+self.args.rulename+"'")
+        print ("Modified Rule '"+self.args.rulename+"'.  Use the `deploy` command to push your changes to AWS.")
 
     def deploy(self):
         #run the deploy code

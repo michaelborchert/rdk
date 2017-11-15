@@ -54,7 +54,7 @@
         "Description": "Create a new AWS lambda function for rule code",
         "Handler": { "Ref": "SourceHandler"},
         "MemorySize": "256",
-        "Role":  { "Fn::GetAtt": [ "rdkConfigRuleRole", "Arn" ] } ,
+        "Role":  { "Fn::GetAtt": [ "rdkLambdaRole", "Arn" ] } ,
         "Runtime": { "Ref": "SourceRuntime"},
         "Timeout": 60
       }
@@ -72,7 +72,7 @@
       "Type": "AWS::Config::ConfigRule",
       "DependsOn": [
         "ConfigPermissionToCallrdkRuleCodeLambda",
-        "rdkConfigRuleRole"
+        "rdkLambdaRole"
       ],
       "Properties": {
         "MaximumExecutionFrequency" : { "Ref": "SourcePeriodic" },
@@ -97,9 +97,10 @@
         "InputParameters": { "Ref": "SourceInputParameters" }
       }
     },
-    "rdkConfigRuleRole": {
+    "rdkLambdaRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
+        "Path": "/rdk/",
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [ {
