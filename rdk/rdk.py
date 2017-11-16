@@ -243,7 +243,7 @@ class rdk():
 
         print("Running modify!")
 
-        self.args.rule_name = self.__clean_rule_name(self.args.rule_name)
+        self.args.rulename = self.__clean_rule_name(self.args.rulename)
 
         #Get existing parameters
         old_params = self.__read_params_file()
@@ -507,11 +507,11 @@ class rdk():
             usage="rdk "+self.args.command + " [-n/--number NUMBER] [-f/--follow]")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule whose logs will be displayed')
         parser.add_argument('-f','--follow',  action='store_true', help='Continuously poll Lambda logs and write to stdout.')
-        parser.add_argument('-n','--number',  default=1, help='Number of previous logged events to display.')
+        parser.add_argument('-n','--number',  default=3, help='Number of previous logged events to display.')
         self.args = parser.parse_args(self.args.command_args, self.args)
 
         self.args.rulename = self.__clean_rule_name(self.args.rulename)
-        print(self.args.rulename)
+        #print(self.args.rulename)
         my_session = self.__get_boto_session()
         cw_logs = my_session.client('logs')
         log_group_name = self.__get_log_group_name()
