@@ -52,6 +52,11 @@ class rdk():
         return(exit_code)
 
     def init(self):
+        parser = argparse.ArgumentParser(
+            prog='rdk '+self.args.command,
+            description = 'Sets up AWS Config and turn current directory into a rdk working directory.  This will enable configuration recording in AWS.')
+        self.args = parser.parse_args(self.args.command_args, self.args)
+
         print ("Running init!")
 
         #if the .rdk directory exists, delete it.
@@ -179,10 +184,10 @@ class rdk():
         return 0
 
     def create(self):
-        print ("Running create!")
-
         #Parse the command-line arguments relevant for creating a Config Rule.
         self.__parse_rule_args(True)
+
+        print ("Running create!")
 
         if not self.args.runtime:
             print("Runtime is required for 'create' command.")
@@ -233,10 +238,10 @@ class rdk():
         return 0
 
     def modify(self):
-        print("Running modify!")
-
         #Parse the command-line arguments necessary for modifying a Config Rule.
         self.__parse_rule_args(False)
+
+        print("Running modify!")
 
         self.args.rule_name = self.__clean_rule_name(self.args.rule_name)
 
@@ -261,13 +266,13 @@ class rdk():
         print ("Modified Rule '"+self.args.rulename+"'.  Use the `deploy` command to push your changes to AWS.")
 
     def deploy(self):
-        #run the deploy code
-        print ("Running deploy!")
-
-        parser = argparse.ArgumentParser(prog='rdk create')
-        parser.add_argument('rulename', metavar='<rulename>', nargs='*', help='Rule name(s) to deploy')
+        parser = argparse.ArgumentParser(prog='rdk deploy')
+        parser.add_argument('rulename', metavar='<rulename>', nargs='*', help='Rule name(s) to deploy.  Rule(s) will be pushed to AWS.')
         parser.add_argument('--all','-a', action='store_true', help="All rules in the working directory will be deployed.")
         self.args = parser.parse_args(self.args.command_args, self.args)
+
+        #run the deploy code
+        print ("Running deploy!")
 
         rule_names = self.__get_rule_list_for_command()
 
@@ -497,10 +502,12 @@ class rdk():
 
     #TODO: currently doesn't handle very large log volumes.
     def logs(self):
-        parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
+        parser = argparse.ArgumentParser(
+            prog='rdk '+self.args.command,
+            usage="rdk "+self.args.command + " [-n/--number NUMBER] [-f/--follow]")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule whose logs will be displayed')
-        parser.add_argument('--follow', '-f', action='store_true', help='Continuously poll Lambda logs and write to stdout.')
-        parser.add_argument('--number', '-n', default=1, help='Number of previous logged events to display.')
+        parser.add_argument('-f','--follow',  action='store_true', help='Continuously poll Lambda logs and write to stdout.')
+        parser.add_argument('-n','--number',  default=1, help='Number of previous logged events to display.')
         self.args = parser.parse_args(self.args.command_args, self.args)
 
         self.args.rulename = self.__clean_rule_name(self.args.rulename)
@@ -668,12 +675,20 @@ class rdk():
         return my_json['Parameters']
 
     def __parse_rule_args(self, is_required):
-        parser = argparse.ArgumentParser(prog='rdk '+self.args.command)
-        parser.add_argument('--runtime','-R', required=is_required, help='Runtime for lambda function', choices=['nodejs','nodejs4.3','nodejs6.10','java8','python2.7','python3.6','dotnetcore1.0','nodejs4.3-edge'])
-        parser.add_argument('--maximum-frequency','-m', help='Maximum execution frequency', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
-        parser.add_argument('--resource-types','-r', required=is_required, help='Resource types that trigger event-based rule evaluation') #TODO - add full list of supported resources
-        parser.add_argument('--input-parameters', '-i', help="[optional] JSON for Config parameters for testing.")
+        usage_string = "[--runtime <runtime>] [--resource-types <resource types>] [--maximum-frequency <max execution frequency>] [--input-parameters <parameter JSON>]"
+
+        if is_required:
+            usage_string = "--runtime <runtime> --resource-types <resource types> [optional configuration flags]"
+
+        parser = argparse.ArgumentParser(
+            prog='rdk '+self.args.command,
+            usage="rdk "+self.args.command + " <rulename> " + usage_string
+        )
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
+        parser.add_argument('-R','--runtime', required=is_required, help='Runtime for lambda function', choices=['nodejs4.3','java8','python2.7','python3.6','dotnetcore1.0'])
+        parser.add_argument('-r','--resource-types', required=is_required, help='Resource types that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('-m','--maximum-frequency', help='Maximum execution frequency', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
+        parser.add_argument('-i','--input-parameters', help="[optional] JSON for Config parameters for testing.")
         self.args = parser.parse_args(self.args.command_args, self.args)
 
     def __parse_test_args(self):
