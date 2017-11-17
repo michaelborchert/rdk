@@ -193,7 +193,7 @@ class rdk():
             print("Runtime is required for 'create' command.")
             return 1
 
-        extension_mapping = {'java8':'.java', 'python2.7':'.py', 'python3.6':'.py','nodejs4.3':'.js'}
+        extension_mapping = {'java8':'.java', 'python2.7':'.py', 'python3.6':'.py','nodejs4.3':'.js', 'dotnetcore1.0':'cs'}
         if self.args.runtime not in extension_mapping:
             print ("rdk does nto support that runtime yet.")
 
@@ -213,6 +213,8 @@ class rdk():
             if self.args.runtime == 'java8':
                 #So complicated.
                 self.__create_java_rule()
+            elif self.args.runtime == 'dotnetcore1.0':
+                self.__create_dotnet_rule()
             else:
                 src = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime, rule_handler + extension_mapping[self.args.runtime])
                 dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, self.args.rulename + extension_mapping[self.args.runtime])
@@ -222,7 +224,6 @@ class rdk():
                 if os.path.exists(src):
                     dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, util_filename + extension_mapping[self.args.runtime])
                     shutil.copyfile(src, dst)
-
 
             #Write the parameters to a file in the rule directory.
             self.__write_params_file()
@@ -296,6 +297,17 @@ class rdk():
 
                 #set source as distribution zip
                 s3_src = os.path.join(os.getcwd(), rules_dir, rule_name, 'build', 'distributions', rule_name+".zip")
+            elif my_rule_params['SourceRuntime'] == "dotnetcore1.0":
+                print ("Packaging "+rule_name)
+                working_dir = os.path.join(os.getcwd(), rules_dir, rule_name)
+                commands = [["dotnet","restore"]]
+                commands.append(["dotnet","lambda","package","-c","Release","-f","netcoreapp1.0"])
+
+                for command in commands:
+                    subprocess.call( command, cwd=working_dir)
+
+                s3_src_dir = os.path.join(os.getcwd(),rules_dir, rule_name,'bin','Release', 'netcoreapp1.0', 'publish')
+                s3_src = shutil.make_archive(os.path.join(rule_name, rule_name), 'zip', s3_src_dir)
             else:
                 print ("Zipping " + rule_name)
                 #zip rule code files and upload to s3 bucket
@@ -593,6 +605,18 @@ class rdk():
         dst = os.path.join(os.getcwd(), rules_dir, self.args.rulename, 'build.gradle')
         shutil.copyfile(src, dst)
 
+    def __create_dotnet_rule(self):
+        runtime_path = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime)
+        dst_path = os.path.join(os.getcwd(), rules_dir, self.args.rulename)
+        for obj in os.listdir(runtime_path):
+            #print(obj)
+            src = os.path.join(runtime_path, obj)
+            dst = os.path.join(dst_path, obj)
+            if os.path.isfile(src):
+                shutil.copyfile(src, dst)
+            else :
+                shutil.copytree(src, dst)
+
     def __print_log_event(self, event):
         time_string = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event['timestamp']/1000))
 
@@ -768,6 +792,8 @@ class rdk():
             return (rule_name+'.lambda_handler')
         elif params['SourceRuntime'] in ['java8']:
             return ('com.rdk.RuleUtil::handler')
+        elif params['SourceRuntime'] in ['dotnetcore1.0']:
+            return ('csharp7.0::Rdk.CustomConfigHandler::FunctionHandler')
 
     def __get_test_CIs(self, rulename):
         test_ci_list = []
