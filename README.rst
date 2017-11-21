@@ -1,7 +1,7 @@
 rdk
 ===
 Rule Development Kit - Version 2
-Extremely Alpha.  Do not use if you haven't personally talked to me.
+This tool should be considered in "Open Beta".  I would not recommend relying on it for critical workloads, and would greatly appreciate feedback and bug reports at mborch@amazon.com!
 
 The RDK is designed to support a "Compliance-as-Code" workflow that is intuitive and productive.  It abstracts away much of the undifferentiated heavy lifting associated with deploying AWS Config rules backed by custom lambda functions, and provides a streamlined develop-deploy-monitor iterative process.
 
@@ -9,7 +9,7 @@ Getting Started
 ===============
 Uses python 2.7/3.6 and is installed via pip.  Requires you to have an AWS account and sufficient permissions to manage the Config service, and to create S3 Buckets, Roles, and Lambda Functions.  An AWS IAM Policy Document that describes the minimum necessary permissions can be found at policy/rdk-minimum-permissions.json.
 
-Under the hood, rdk uses boto3 to make API calls to AWS, so you can set your credentials any way that boto3 recognizes (options 3 through 8 here: http://boto3.readthedocs.io/en/latest/guide/configuration.html) or pass them in with the command-line parameters --profile, --region, --access-key, or --secret-access-key
+Under the hood, rdk uses boto3 to make API calls to AWS, so you can set your credentials any way that boto3 recognizes (options 3 through 8 here: http://boto3.readthedocs.io/en/latest/guide/configuration.html) or pass them in with the command-line parameters --profile, --region, --access-key-id, or --secret-access-key
 
 If you just want to use the RDK, go ahead and install it using pip::
 

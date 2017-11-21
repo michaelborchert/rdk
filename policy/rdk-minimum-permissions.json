@@ -48,7 +48,7 @@
                 "iam:PassRole"
             ],
             "Effect": "Allow",
-            "Resource": ["arn:aws:iam::*:role/rdk/config-role", "arn:aws:iam::*:role/service-role/SecurityServiceRole"]
+            "Resource": ["arn:aws:iam::*:role/rdk/config-role"]
         },
         {
             "Sid": "RdkPermissionsPassRole",

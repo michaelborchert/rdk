@@ -61,9 +61,9 @@ namespace Rdk
         {
             this.ConfigService = configService;
         }
-        
+
         /// <summary>
-        /// This method is called for every Lambda invocation. This method takes in an Config event object and can be used 
+        /// This method is called for every Lambda invocation. This method takes in an Config event object and can be used
         /// to respond to Config notifications.
         /// </summary>
         /// <param name="evnt"></param>
@@ -79,9 +79,21 @@ namespace Rdk
 
         private void DoHandle(ConfigEvent configEvent, ILambdaContext context, AmazonConfigServiceClient configServiceClient)
         {
-            JObject ruleParamsObj = JObject.Parse(configEvent.RuleParameters.ToString());
+            JObject ruleParamsObj;
+            JObject configItem;
+
+            if (configEvent.RuleParameters != null){
+               ruleParamsObj = JObject.Parse(configEvent.RuleParameters.ToString());
+            } else {
+              ruleParamsObj = new JObject();
+            }
+
             JObject invokingEventObj = JObject.Parse(configEvent.InvokingEvent.ToString());
-            JObject configItem = JObject.Parse(invokingEventObj[CONFIGURATION_ITEM].ToString());
+            if(invokingEventObj["configurationItem"] != null){
+              configItem = JObject.Parse(invokingEventObj[CONFIGURATION_ITEM].ToString());
+            } else {
+              configItem = new JObject();
+            }
 
             FailForIncompatibleEventTypes(invokingEventObj);
             ComplianceType myCompliance = ComplianceType.NOT_APPLICABLE;
@@ -92,7 +104,7 @@ namespace Rdk
             }
 
             // Associates the evaluation result with the AWS account published in the event.
-            Evaluation evaluation = new Evaluation { 
+            Evaluation evaluation = new Evaluation {
                 ComplianceResourceId = GetResourceId(configItem),
                 ComplianceResourceType = GetResourceType(configItem),
                 OrderingTimestamp = GetCiCapturedTime(configItem),
@@ -112,7 +124,7 @@ namespace Rdk
             String messageType = (String) invokingEventObj[MESSAGE_TYPE_PROPERTY];
             if (!IsCompatibleMessageType(messageType))
             {
-                throw new Exception(String.Format("Events with the message type '%s' are not evaluated for this Config rule.", messageType));
+                throw new Exception(String.Format("Events with the message type '{0}' are not evaluated for this Config rule.", messageType));
             }
         }
 
@@ -139,7 +151,7 @@ namespace Rdk
 
         private bool IsStatusNotApplicable(String status)
         {
-            return String.Equals(RESOURCE_DELETED, status) 
+            return String.Equals(RESOURCE_DELETED, status)
                 || String.Equals(RESOURCE_DELETED_NOT_RECORDED, status)
                 || String.Equals(RESOURCE_NOT_RECORDED, status);
         }
@@ -147,13 +159,14 @@ namespace Rdk
         // Sends the evaluation results to AWS Config.
         private async void DoPutEvaluations(AmazonConfigServiceClient configClient, ConfigEvent configEvent, Evaluation evaluation)
         {
+            Console.WriteLine("inside DoPutEvaluations...");
             PutEvaluationsRequest req = new PutEvaluationsRequest();
             req.Evaluations.Add(evaluation);
             req.ResultToken = configEvent.ResultToken;
 
             Task<PutEvaluationsResponse> respTask = configClient.PutEvaluationsAsync(req);
             PutEvaluationsResponse response = await respTask;
-
+            Console.WriteLine(response.HttpStatusCode);
             // Ends the function execution if any evaluation results are not successfully reported.
             if (response.FailedEvaluations.Count > 0) {
                 throw new Exception(String.Format(
@@ -166,7 +179,7 @@ namespace Rdk
         {
             return DateTime.Parse(dateString, null, System.Globalization.DateTimeStyles.RoundtripKind);
         }
-        
+
         static void Main(string[] args)
         {
             Console.WriteLine("Hello World!");

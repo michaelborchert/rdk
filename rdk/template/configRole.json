@@ -75,7 +75,8 @@
         "rdkLambdaRole"
       ],
       "Properties": {
-        "MaximumExecutionFrequency" : { "Ref": "SourcePeriodic" },
+        "ConfigRuleName": {"Fn::Sub": "${AWS::StackName}" },
+        "Description": {"Fn::Sub": "${AWS::StackName}" },
         "Scope": {
           "ComplianceResourceTypes": { "Ref": "SourceEvents" }
         },
@@ -88,11 +89,7 @@
           }, {
             "EventSource": "aws.config",
             "MessageType": "OversizedConfigurationItemChangeNotification"
-          }, {
-            "EventSource": "aws.config",
-            "MessageType": "ScheduledNotification",
-            "MaximumExecutionFrequency": { "Ref": "SourcePeriodic"}
-            }]
+          }]
         },
         "InputParameters": { "Ref": "SourceInputParameters" }
       }

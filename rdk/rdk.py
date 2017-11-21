@@ -84,12 +84,10 @@ class rdk():
         config_role_arn = ""
         delivery_channel_exists = False
         config_bucket_exists = False
-        #config_role_exists = False
 
         #Check to see if the ConfigRecorder has been created.
         recorders = my_config.describe_configuration_recorders()
         if len(recorders['ConfigurationRecorders']) > 0:
-            #print(recorders)
             config_recorder_exists = True
             config_recorder_name = recorders['ConfigurationRecorders'][0]['name']
             config_role_arn = recorders['ConfigurationRecorders'][0]['roleARN']
@@ -143,7 +141,7 @@ class rdk():
             delivery_permissions_policy = policy_template.replace('ACCOUNTID', account_id)
             my_iam.put_role_policy(RoleName=config_role_name, PolicyName='ConfigDeliveryPermissions', PolicyDocument=delivery_permissions_policy)
 
-            #wait for changes to propagate. TODO: only do this if we had to create the role.
+            #wait for changes to propagate.
             print('Waiting for IAM role to propagate')
             time.sleep(16)
 
@@ -211,7 +209,6 @@ class rdk():
 
             #copy rule template into rule directory
             if self.args.runtime == 'java8':
-                #So complicated.
                 self.__create_java_rule()
             elif self.args.runtime == 'dotnetcore1.0':
                 self.__create_dotnet_rule()
@@ -352,7 +349,7 @@ class rdk():
                     'ParameterValue': self.__get_handler(rule_name, my_rule_params)
                 }]
 
-            #deploy config rule TODO: better detection of existing rules and update/create decision logic
+            #deploy config rule
             cfn_body = os.path.join(os.getcwd(), rdk_dir, "configRole.json")
             my_cfn = my_session.client('cloudformation')
 
@@ -393,7 +390,7 @@ class rdk():
                 )
                 print("Lambda code updated.")
             except ClientError as e:
-                #If we're in the exception, the stack does not exist and we should create it.  Try/Catch blocks are not meant for flow control, but I'm not about to list all of the CFN stacks in an account just to see if this one stack exists every time we do a deploy.
+                #If we're in the exception, the stack does not exist and we should create it.
                 print ("Creating CloudFormation Stack for " + rule_name)
                 response = my_cfn.create_stack(
                     StackName=rule_name,
@@ -404,7 +401,7 @@ class rdk():
                     ],
                 )
 
-            #wait for changes to propagate. TODO: detect and report failures
+            #wait for changes to propagate.
             self.__wait_for_cfn_stack(my_cfn, rule_name)
 
         print('Config deploy complete.')
@@ -433,14 +430,11 @@ class rdk():
             my_cis = self.__get_test_CIs(rule_name)
 
             #Get Parameters from Rule config
-            #TODO: Need better error outputs to make it clear that issues are in the lambda code, not the RDK.
             my_rule_params = self.__get_rule_parameters(rule_name)
             my_parameters = my_rule_params['InputParameters']
 
             #Execute the evaluate_compliance function
             for my_ci in my_cis:
-                #print(my_ci)
-                #print(my_parameters)
                 print ("\t\tTesting CI " + my_ci['resourceType'])
                 result = getattr(module, 'evaluate_compliance')(my_ci, my_parameters)
                 print("\t\t\t"+result)
@@ -466,7 +460,6 @@ class rdk():
 
             my_parameters = {}
             if self.args.test_parameters:
-                #print (self.args.test_parameters)
                 my_parameters = json.loads(self.args.test_parameters)
 
             for my_ci in my_cis:
@@ -491,7 +484,7 @@ class rdk():
                     Payload=json.dumps(test_event)
                 )
 
-                #If there's an error dump execution logs to stdout, if not print out the value returned by the lambda function.
+                #If there's an error dump execution logs to the terminal, if not print out the value returned by the lambda function.
                 if 'FunctionError' in result:
                     print(base64.b64decode(str(result['LogResult'])))
                 else:
@@ -512,7 +505,6 @@ class rdk():
         my_test_ci = TestCI(self.args.ci_type)
         print(json.dumps(my_test_ci.get_json(), indent=4))
 
-    #TODO: currently doesn't handle very large log volumes.
     def logs(self):
         parser = argparse.ArgumentParser(
             prog='rdk '+self.args.command,
@@ -523,11 +515,10 @@ class rdk():
         self.args = parser.parse_args(self.args.command_args, self.args)
 
         self.args.rulename = self.__clean_rule_name(self.args.rulename)
-        #print(self.args.rulename)
+
         my_session = self.__get_boto_session()
         cw_logs = my_session.client('logs')
         log_group_name = self.__get_log_group_name()
-        #print(log_group_name)
 
         #Retrieve the last number of log events as specified by the user.
         try:
@@ -535,12 +526,12 @@ class rdk():
                 logGroupName = log_group_name,
                 orderBy = 'LastEventTime',
                 descending = True,
-                limit = int(self.args.number) #This is probably overkill, but this is the worst-case scenario if there is only one event per stream
+                limit = int(self.args.number) #This is the worst-case scenario if there is only one event per stream
             )
 
             #Sadly we can't just use filter_log_events, since we don't know the timestamps yet and filter_log_events doesn't appear to support ordering.
             my_events = self.__get_log_events(cw_logs, log_streams, int(self.args.number))
-            my_events.reverse()
+
             latest_timestamp = 0
 
             if (my_events is None):
@@ -558,8 +549,6 @@ class rdk():
                     while True:
                         #Wait 2 seconds
                         time.sleep(2)
-                        #print(latest_timestamp)
-                        #print(int(time.time())*1000)
 
                         #Get all events between now and the timestamp of the most recent event.
                         my_new_events = cw_logs.filter_log_events(
@@ -570,7 +559,6 @@ class rdk():
 
 
                         for event in my_new_events['events']:
-                            #print(event)
                             if 'timestamp' in event:
                                 #Get the timestamp on the most recent event.
                                 if event['timestamp'] > latest_timestamp:
@@ -609,7 +597,6 @@ class rdk():
         runtime_path = os.path.join(os.getcwd(), rdk_dir, 'runtime', self.args.runtime)
         dst_path = os.path.join(os.getcwd(), rules_dir, self.args.rulename)
         for obj in os.listdir(runtime_path):
-            #print(obj)
             src = os.path.join(runtime_path, obj)
             dst = os.path.join(dst_path, obj)
             if os.path.isfile(src):
@@ -631,7 +618,6 @@ class rdk():
 
         message_string = '\n'.join(formatted_lines)
         message_string = message_string.replace('\n','\n                      ')
-        #message_string = str(event['message']).rstrip().replace('\n','\n                      ')
 
         print(time_string + " - " + message_string)
 
@@ -647,12 +633,11 @@ class rdk():
             )
 
             #Go through the logs and add events to my output array.
-
             for event in events['events']:
                 log_events.append(event)
                 event_count = event_count + 1
 
-                #Once I have enough events, stop.
+                #Once we have enough events, stop.
                 if event_count >= number_of_events:
                     return log_events
 
@@ -670,8 +655,8 @@ class rdk():
 
         if self.args.profile:
             session_args['profile_name']=self.args.profile
-        elif self.args.access_key and self.args.secret_access_key:
-            session_args['aws_access_key_id']=self.args.access_key
+        elif self.args.access_key_id and self.args.secret_access_key:
+            session_args['aws_access_key_id']=self.args.access_key_id
             session_args['aws_secret_access_key']=self.args.secret_access_key
 
         return boto3.session.Session(**session_args)
@@ -710,7 +695,7 @@ class rdk():
         )
         parser.add_argument('rulename', metavar='<rulename>', help='Rule name to create/modify')
         parser.add_argument('-R','--runtime', required=is_required, help='Runtime for lambda function', choices=['nodejs4.3','java8','python2.7','python3.6','dotnetcore1.0'])
-        parser.add_argument('-r','--resource-types', required=is_required, help='Resource types that trigger event-based rule evaluation') #TODO - add full list of supported resources
+        parser.add_argument('-r','--resource-types', required=is_required, help='Resource types that trigger event-based rule evaluation')
         parser.add_argument('-m','--maximum-frequency', help='Maximum execution frequency', choices=['One_Hour','Three_Hours','Six_Hours','Twelve_Hours','TwentyFour_Hours'])
         parser.add_argument('-i','--input-parameters', help="[optional] JSON for Config parameters for testing.")
         self.args = parser.parse_args(self.args.command_args, self.args)
@@ -780,7 +765,7 @@ class rdk():
         in_progress = True
         while in_progress:
             my_stack = cfn_client.describe_stacks(StackName=stackname)
-            #print(my_stack)
+
             if 'IN_PROGRESS' not in my_stack['Stacks'][0]['StackStatus']:
                 in_progress = False
             else:
@@ -797,18 +782,7 @@ class rdk():
 
     def __get_test_CIs(self, rulename):
         test_ci_list = []
-        if self.args.test_ci_json:
-            print ("Testing with supplied CI JSON - NOT YET IMPLEMENTED") #TODO
-            #if "file://" in self.args.test_ci_json:
-            #    tests_path  = os.path.join(os.path.dirname(str(self.args.test_ci_json).replace('file://','')))
-            #    if os.path.exists(test_path):
-            #        test_ci_list = self._load_cis_from_file(test_path)
-            #    else:
-            #        print("Could not find specified file.")
-            #        sys.exit(1)
-            #else:
-            #    test_ci_list = json.loads()
-        elif self.args.test_ci_types:
+        if self.args.test_ci_types:
             print("\tTesting with generic CI for supplied Resource Type(s)")
             ci_types = self.args.test_ci_types.split(",")
             for ci_type in ci_types:
@@ -852,10 +826,6 @@ class rdk():
             sys.exit(1)
 
         return my_lambda_arn
-
-    #def _load_cis_from_file(self, filename):
-    #    my_cis = []
-    #    return my_cis
 
 class TestCI():
     def __init__(self, ci_type):
