@@ -40,7 +40,8 @@
       "tags": [],
       "volumeType": "gp2",
       "iops": 100,
-      "encrypted": false
+      "encrypted": true,
+      "kmsKeyId": "arn:aws:kms:ap-southeast-1:055409840355:key/bd41e26b-d347-4c59-ab0b-32aee30fcf8d"
     },
     "supplementaryConfiguration": {}
   }

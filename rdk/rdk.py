@@ -508,7 +508,7 @@ class rdk():
     def logs(self):
         parser = argparse.ArgumentParser(
             prog='rdk '+self.args.command,
-            usage="rdk "+self.args.command + " [-n/--number NUMBER] [-f/--follow]")
+            usage="rdk "+self.args.command + " <rulename> [-n/--number NUMBER] [-f/--follow]")
         parser.add_argument('rulename', metavar='<rulename>', help='Rule whose logs will be displayed')
         parser.add_argument('-f','--follow',  action='store_true', help='Continuously poll Lambda logs and write to stdout.')
         parser.add_argument('-n','--number',  default=3, help='Number of previous logged events to display.')
@@ -736,7 +736,7 @@ class rdk():
         parameters = {
             'RuleName': self.args.rulename,
             'SourceRuntime': self.args.runtime,
-            'CodeBucket': code_bucket_prefix + account_id,
+            #'CodeBucket': code_bucket_prefix + account_id,
             'CodeKey': self.args.rulename+'.zip',
             'InputParameters': json.dumps(my_input_params)
         }
