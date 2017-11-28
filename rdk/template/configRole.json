@@ -138,6 +138,16 @@
                 ],
                 "Effect": "Allow",
                 "Resource": "*"
+              },
+              {
+                "Sid": "4",
+                "Action": [
+                  "iam:List*",
+                  "iam:Describe*",
+                  "iam:Get*"
+                ],
+                "Effect": "Allow",
+                "Resource": "*"
               }
             ]
           }
