@@ -69,15 +69,15 @@ namespace Rdk
         /// <param name="evnt"></param>
         /// <param name="context"></param>
         /// <returns>Nothing</returns>
-        public void FunctionHandler(ConfigEvent evnt, ILambdaContext context)
+        public async Task FunctionHandler(ConfigEvent evnt, ILambdaContext context)
         {
             Console.WriteLine("inside function handler...");
             Amazon.RegionEndpoint region = Amazon.RegionEndpoint.GetBySystemName(System.Environment.GetEnvironmentVariable(AWS_REGION_PROPERTY));
             AmazonConfigServiceClient configServiceClient = new AmazonConfigServiceClient(region);
-            DoHandle(evnt, context, configServiceClient);
+            await DoHandle(evnt, context, configServiceClient);
         }
 
-        private void DoHandle(ConfigEvent configEvent, ILambdaContext context, AmazonConfigServiceClient configServiceClient)
+        private async Task DoHandle(ConfigEvent configEvent, ILambdaContext context, AmazonConfigServiceClient configServiceClient)
         {
             JObject ruleParamsObj;
             JObject configItem;
@@ -111,7 +111,7 @@ namespace Rdk
                 ComplianceType = myCompliance
             };
 
-            DoPutEvaluations(configServiceClient, configEvent, evaluation);
+            await DoPutEvaluations(configServiceClient, configEvent, evaluation);
         }
 
         private String GetResourceType(JObject configItem)
@@ -157,16 +157,17 @@ namespace Rdk
         }
 
         // Sends the evaluation results to AWS Config.
-        private async void DoPutEvaluations(AmazonConfigServiceClient configClient, ConfigEvent configEvent, Evaluation evaluation)
+        private async Task DoPutEvaluations(AmazonConfigServiceClient configClient, ConfigEvent configEvent, Evaluation evaluation)
         {
             Console.WriteLine("inside DoPutEvaluations...");
             PutEvaluationsRequest req = new PutEvaluationsRequest();
             req.Evaluations.Add(evaluation);
             req.ResultToken = configEvent.ResultToken;
 
-            Task<PutEvaluationsResponse> respTask = configClient.PutEvaluationsAsync(req);
-            PutEvaluationsResponse response = await respTask;
-            Console.WriteLine(response.HttpStatusCode);
+
+            Task<PutEvaluationsResponse> taskResp = configClient.PutEvaluationsAsync(req);
+            PutEvaluationsResponse response = await taskResp;
+
             // Ends the function execution if any evaluation results are not successfully reported.
             if (response.FailedEvaluations.Count > 0) {
                 throw new Exception(String.Format(
