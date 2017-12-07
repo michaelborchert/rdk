@@ -678,8 +678,13 @@ class rdk():
                 obj_path = os.path.join('.', obj_name)
                 if os.path.isdir(obj_path) and not obj_name == 'rdk':
                     for file_name in os.listdir(obj_path):
-                        if file_name.split('.')[0] == obj_name and obj_name not in rule_names:
-                            rule_names.append(obj_name)
+                        if obj_name not in rule_names:
+                            if file_name.split('.')[0] == obj_name:
+                                rule_names.append(obj_name)
+                            if os.path.exists(os.path.join(obj_path, 'src', 'main', 'java', 'com', 'rdk', 'RuleCode.java')):
+                                rule_names.append(obj_name)
+                            if os.path.exists(os.path.join(obj_path, 'RuleCode.cs')):
+                                rule_names.append(obj_name)
         else:
             rule_names.append(self.__clean_rule_name(self.args.rulename[0]))
 
