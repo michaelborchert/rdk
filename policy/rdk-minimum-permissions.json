@@ -55,8 +55,7 @@
             "Action": [
                 "iam:CreateRole",
                 "iam:PassRole",
-                "iam:PutRolePolicy",
-                "iam:AttachRolePolicy"
+                "iam:PutRolePolicy"
             ],
             "Effect": "Allow",
             "Resource": "arn:aws:iam::*:role/rdk/*"

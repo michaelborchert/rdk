@@ -172,12 +172,21 @@ class rdk():
 
         if not bucket_exists:
             print('Creating Code bucket '+code_bucket_name )
-            my_s3.create_bucket(
-                Bucket=code_bucket_name,
-                CreateBucketConfiguration={
-                    'LocationConstraint': my_session.region_name
-                }
-            )
+
+            bucket_configuration = {}
+
+            #Consideration for us-east-1 S3 API
+            if my_session.region_name == 'us-east-1':
+                my_s3.create_bucket(
+                    Bucket=code_bucket_name
+                )
+            else:
+                my_s3.create_bucket(
+                    Bucket=code_bucket_name,
+                    CreateBucketConfiguration={
+                        'LocationConstraint': my_session.region_name
+                    }
+                )
 
         return 0
 

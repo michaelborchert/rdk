@@ -13,7 +13,7 @@ def readme():
         return f.read()
 
 setup(name='rdk',
-      version='0.2.30',
+      version='0.2.31',
       description='Rule Development Kit CLI for AWS Config',
       long_description=readme(),
       url='https://github.com/michaelborchert/rdk',
